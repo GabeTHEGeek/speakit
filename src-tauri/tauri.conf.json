@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SpeakIt",
+  "version": "0.2.3",
+  "identifier": "com.speakit.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "SpeakIt",
+        "width": 760,
+        "height": 880,
+        "minWidth": 680,
+        "minHeight": 800,
+        "resizable": true,
+        "center": true
+      },
+      {
+        "label": "overlay",
+        "title": "SpeakIt Voice",
+        "width": 310,
+        "height": 92,
+        "visible": false,
+        "focus": false,
+        "focusable": false,
+        "alwaysOnTop": true,
+        "decorations": false,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "resizable": false,
+        "skipTaskbar": true,
+        "shadow": false
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "dmg",
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "infoPlist": "Info.plist",
+      "signingIdentity": "686CA7FA897E5B502753C0A93B691AF0E3CBC7D5",
+      "entitlements": "Entitlements.plist"
+    }
+  }
+}
