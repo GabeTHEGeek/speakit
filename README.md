@@ -65,30 +65,6 @@ If automatic paste stops working, open **System Settings → Privacy & Security 
 
 Use **Run check** in SpeakIt's System diagnostics section to verify the microphone signal, Accessibility status, model installation, app location, and recent event timing. The report can be copied when filing an issue.
 
-## Development
-
-Prerequisites include Node.js, npm, Rust, and the macOS/Xcode command-line build tools.
-
-```sh
-npm install
-npm run tauri dev
-```
-
-Run the checks:
-
-```sh
-npm run build
-cargo test --manifest-path src-tauri/Cargo.toml
-```
-
-Build the macOS installer:
-
-```sh
-npm run tauri build
-```
-
-The repository's signing identity is intended for local development builds. Public distribution requires an appropriate Apple Developer certificate and notarization credentials.
-
 ## Current scope
 
-SpeakIt currently targets English dictation on macOS. Local notes, calendar integration, additional languages, and cross-platform builds are not part of the current release.
+SpeakIt currently focuses on English voice-to-text dictation for macOS. Google Calendar integration and local note storage are not included in the current version.
