@@ -6,7 +6,7 @@ import "./styles.css";
 
 type AppStatus = "ready" | "recording" | "transcribing" | "error";
 type FocusTarget = { appName: string; role: string; canPaste: boolean };
-type ActiveTarget = { appName: string; pid: number };
+type ActiveTarget = { appName: string; pid: number; anchorX: number; anchorY: number };
 type PasteResult = { focusedRole: string; focusedSubrole: string };
 type DiagnosticReport = {
   version: string; accessibilityReady: boolean; modelReady: boolean; modelSizeMb: number;
@@ -18,18 +18,24 @@ if (currentWindow.label === "overlay") renderOverlay();
 else renderMainApp();
 
 function renderOverlay() {
+  document.documentElement.className = "overlay-html";
   document.body.className = "overlay-body";
+  document.body.dataset.visible = "false";
   document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     <div class="voice-cube">
-      <div class="cube-icon"><span></span></div>
-      <div class="cube-copy"><strong>Listening</strong><small>Release shortcut to finish</small></div>
       <div class="waveform" aria-label="Live microphone level">
-        ${Array.from({ length: 13 }, (_, index) => `<i style="--i:${index}"></i>`).join("")}
+        ${Array.from({ length: 25 }, (_, index) => `<i style="--i:${index}"></i>`).join("")}
       </div>
+      <strong>Listening</strong>
     </div>`;
   const bars = [...document.querySelectorAll<HTMLElement>(".waveform i")];
   let level = 0.08;
   void listen<number>("waveform-level", (event) => { level = Math.max(0.06, Math.min(1, event.payload)); });
+  void listen<boolean>("overlay-visibility", (event) => {
+    document.body.dataset.visible = String(event.payload);
+  });
+  void currentWindow.setIgnoreCursorEvents(true).catch(() => undefined);
+  void currentWindow.show();
   const animate = () => {
     const now = performance.now() / 120;
     bars.forEach((bar, index) => {
@@ -134,6 +140,8 @@ function renderMainApp() {
   let focusTarget: FocusTarget | null = null;
   let targetPid = 0;
   let shortcut = localStorage.getItem("dictationShortcut") || "CommandOrControl+Shift+Space";
+  let lastOverlayAnchorX = Number(localStorage.getItem("lastOverlayAnchorX")) || 0;
+  let lastOverlayAnchorY = Number(localStorage.getItem("lastOverlayAnchorY")) || 0;
   let lastLevelUpdate = 0;
   let shortcutHeld = false;
   let captureShortcut = false;
@@ -171,8 +179,8 @@ function renderMainApp() {
     shortcutEditor.textContent = shortcutLabel(shortcut);
   }
 
-  async function showOverlay() {
-    await invoke("show_overlay");
+  async function showOverlay(anchorX: number, anchorY: number) {
+    await invoke("show_overlay", { anchorX, anchorY });
   }
 
   async function hideOverlay() {
@@ -187,10 +195,16 @@ function renderMainApp() {
       return;
     }
     try {
+      void invoke("play_activation_sound").catch((error) => logEvent("sound.start.failed", errorDetails(error)));
       logEvent("recording.start.requested", `shortcut=${shortcut} modelReady=${modelIsReady}`);
-      const targetPromise = requireTextField
-        ? invoke<ActiveTarget>("frontmost_target").catch(() => ({ appName: "", pid: 0 }))
-        : Promise.resolve({ appName: "", pid: 0 });
+      const targetPromise = invoke<ActiveTarget>(requireTextField ? "frontmost_target" : "main_window_target")
+        .catch(() => ({ appName: "", pid: 0, anchorX: 0, anchorY: 0 }));
+      const earlyOverlayPromise = requireTextField
+        ? showOverlay(lastOverlayAnchorX, lastOverlayAnchorY)
+          .catch((error) => logEvent("overlay.early.failed", errorDetails(error)))
+        : targetPromise
+          .then((target) => showOverlay(target.anchorX, target.anchorY))
+          .catch((error) => logEvent("overlay.early.failed", errorDetails(error)));
       if (requireTextField && shortcut.endsWith("+Space") && !/(Command|Control)/.test(shortcut)) {
         await invoke("erase_trigger_space");
       }
@@ -218,11 +232,18 @@ function renderMainApp() {
       source.connect(processor);
       processor.connect(audioContext.destination);
       const target = await targetPromise;
+      await earlyOverlayPromise;
+      await showOverlay(target.anchorX, target.anchorY);
+      if (requireTextField && (target.anchorX !== 0 || target.anchorY !== 0)) {
+        lastOverlayAnchorX = target.anchorX;
+        lastOverlayAnchorY = target.anchorY;
+        localStorage.setItem("lastOverlayAnchorX", String(target.anchorX));
+        localStorage.setItem("lastOverlayAnchorY", String(target.anchorY));
+      }
       targetPid = target.pid;
       focusTarget = { appName: target.appName || "your active app", role: "", canPaste: requireTextField };
-      logEvent("recording.started", `sampleRate=${audioContext.sampleRate} target=${focusTarget.appName} pid=${targetPid}`);
+      logEvent("recording.started", `sampleRate=${audioContext.sampleRate} target=${focusTarget.appName} pid=${targetPid} anchorX=${target.anchorX.toFixed(1)} anchorY=${target.anchorY.toFixed(1)}`);
       setStatus("recording", focusTarget.canPaste ? `Listening for ${focusTarget.appName}…` : "Listening…");
-      await showOverlay();
       if (requireTextField && !shortcutHeld) await stopRecording();
     } catch (error) {
       logEvent("recording.start.failed", errorDetails(error));
@@ -234,6 +255,7 @@ function renderMainApp() {
 
   async function stopRecording() {
     if (status !== "recording" || !audioContext) return;
+    void invoke("play_stop_sound").catch((error) => logEvent("sound.stop.failed", errorDetails(error)));
     await hideOverlay();
     const inputRate = audioContext.sampleRate;
     processor?.disconnect();
@@ -288,10 +310,9 @@ function renderMainApp() {
         if (event.state === "Pressed" && !shortcutHeld) {
           logEvent("shortcut.pressed", event.shortcut);
           shortcutHeld = true;
-          void invoke("play_activation_sound").catch((error) => logEvent("sound.activation.failed", errorDetails(error)));
           void startRecording(true);
         }
-        if (event.state === "Released") {
+        if (event.state === "Released" && shortcutHeld) {
           logEvent("shortcut.released", event.shortcut);
           shortcutHeld = false;
           void stopRecording();
@@ -454,7 +475,9 @@ function renderMainApp() {
       testSource.disconnect();
       await testContext.close();
       preparedStream.getTracks().forEach((track) => { track.enabled = false; });
-      micResult = micPeak > 0.0005 ? "PASS — audio signal detected" : "WARNING — permission granted, no audio signal detected";
+      micResult = micPeak > 0.0001
+        ? "PASS — audio signal detected"
+        : "WARNING — microphone is available, but the room was quiet during this test";
       logEvent("diagnostics.microphone", `${micResult} peak=${micPeak.toFixed(5)} label=${micLabel}`);
     } catch (error) {
       micResult = `FAILED — ${errorDetails(error)}`;

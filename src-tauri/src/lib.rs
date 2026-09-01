@@ -72,32 +72,112 @@ fn request_accessibility_permission() -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
+fn position_overlay_window(
+    app: &tauri::AppHandle,
+    anchor_x: f64,
+    anchor_y: f64,
+) -> Result<(), String> {
     let window = app
         .get_webview_window("overlay")
         .ok_or("Waveform window is unavailable")?;
-    if let Some(monitor) = window.primary_monitor().map_err(|e| e.to_string())? {
+    let monitors = window.available_monitors().map_err(|e| e.to_string())?;
+    let active_monitor = monitors.into_iter().find(|monitor| {
         let scale = monitor.scale_factor();
+        let position = monitor.position();
         let size = monitor.size();
-        let origin = monitor.position();
-        let width = (310.0 * scale) as i32;
-        let height = (92.0 * scale) as i32;
-        let x = origin.x + (size.width as i32 - width) / 2;
-        let y = origin.y + size.height as i32 - height - (26.0 * scale) as i32;
+        let logical_x = position.x as f64 / scale;
+        let logical_y = position.y as f64 / scale;
+        let logical_width = size.width as f64 / scale;
+        let logical_height = size.height as f64 / scale;
+        anchor_x >= logical_x
+            && anchor_x < logical_x + logical_width
+            && anchor_y >= logical_y
+            && anchor_y < logical_y + logical_height
+    });
+    let selected_monitor = match active_monitor {
+        Some(monitor) => Some(monitor),
+        None => {
+            append_log(
+                "overlay.monitor.fallback",
+                &format!("anchor_x={anchor_x:.1} anchor_y={anchor_y:.1}"),
+            );
+            window.primary_monitor().map_err(|e| e.to_string())?
+        }
+    };
+    if let Some(monitor) = selected_monitor {
+        let scale = monitor.scale_factor();
+        let work_area = monitor.work_area();
+        let logical_work_x = work_area.position.x as f64 / scale;
+        let logical_work_y = work_area.position.y as f64 / scale;
+        let logical_work_width = work_area.size.width as f64 / scale;
+        let logical_work_height = work_area.size.height as f64 / scale;
+        let (x, y) = centered_overlay_position(
+            logical_work_x,
+            logical_work_y,
+            logical_work_width,
+            logical_work_height,
+        );
         window
-            .set_position(tauri::PhysicalPosition::new(x, y))
+            .set_position(tauri::LogicalPosition::new(x, y))
             .map_err(|e| e.to_string())?;
+        append_log(
+            "overlay.positioned",
+            &format!(
+                "monitor={} x={x:.1} y={y:.1} anchor_x={anchor_x:.1} anchor_y={anchor_y:.1} work_x={logical_work_x:.1} work_y={logical_work_y:.1} work_width={logical_work_width:.1} work_height={logical_work_height:.1} scale={scale:.2}",
+                monitor.name().map(String::as_str).unwrap_or("unknown")
+            ),
+        );
     }
-    window.show().map_err(|e| e.to_string())
+    Ok(())
+}
+
+fn centered_overlay_position(
+    work_x: f64,
+    work_y: f64,
+    work_width: f64,
+    work_height: f64,
+) -> (f64, f64) {
+    const OVERLAY_WIDTH: f64 = 352.0;
+    const OVERLAY_HEIGHT: f64 = 88.0;
+    const BOTTOM_MARGIN: f64 = 20.0;
+    (
+        work_x + (work_width - OVERLAY_WIDTH) / 2.0,
+        work_y + work_height - OVERLAY_HEIGHT - BOTTOM_MARGIN,
+    )
+}
+
+#[tauri::command]
+fn show_overlay(app: tauri::AppHandle, anchor_x: f64, anchor_y: f64) -> Result<(), String> {
+    position_overlay_window(&app, anchor_x, anchor_y)?;
+    app.emit_to("overlay", "overlay-visibility", true)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn hide_overlay(app: tauri::AppHandle) -> Result<(), String> {
-    app.get_webview_window("overlay")
-        .ok_or("Waveform window is unavailable")?
-        .hide()
+    app.emit_to("overlay", "overlay-visibility", false)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn main_window_target(app: tauri::AppHandle) -> Result<ActiveTarget, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("SpeakIt window is unavailable")?;
+    let monitor = window
+        .current_monitor()
+        .map_err(|e| e.to_string())?
+        .or(window.primary_monitor().map_err(|e| e.to_string())?)
+        .ok_or("Could not identify the SpeakIt monitor")?;
+    let scale = monitor.scale_factor();
+    let position = monitor.position();
+    let size = monitor.size();
+    Ok(ActiveTarget {
+        app_name: "SpeakIt".into(),
+        pid: std::process::id() as i32,
+        anchor_x: position.x as f64 / scale + size.width as f64 / scale / 2.0,
+        anchor_y: position.y as f64 / scale + size.height as f64 / scale / 2.0,
+    })
 }
 
 fn model_path() -> Result<PathBuf, String> {
@@ -210,28 +290,46 @@ async fn prepare_model() -> Result<(), String> {
     result
 }
 
-#[tauri::command]
-fn play_activation_sound() -> Result<(), String> {
+fn play_feedback_sound(
+    name: &'static str,
+    file: &'static str,
+    volume: &'static str,
+    duration: &'static str,
+) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        Command::new("/usr/bin/afplay")
-            .args([
-                "--volume",
-                "0.18",
-                "--time",
-                "0.16",
-                "/System/Library/Sounds/Tink.aiff",
-            ])
+        let mut playback = Command::new("/usr/bin/afplay")
+            .args(["--volume", volume, "--time", duration, file])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|e| format!("Could not play the activation sound: {e}"))?;
-        append_log("sound.activation.played", "volume=0.18 duration=0.16s");
+            .map_err(|e| format!("Could not play the {name} sound: {e}"))?;
+        append_log(
+            &format!("sound.{name}.started"),
+            &format!("volume={volume} duration={duration}s file={file}"),
+        );
+        std::thread::spawn(move || match playback.wait() {
+            Ok(status) if status.success() => {
+                append_log(&format!("sound.{name}.complete"), "status=success")
+            }
+            Ok(status) => append_log(&format!("sound.{name}.failed"), &format!("status={status}")),
+            Err(error) => append_log(&format!("sound.{name}.failed"), &error.to_string()),
+        });
         return Ok(());
     }
     #[cfg(not(target_os = "macos"))]
     Ok(())
+}
+
+#[tauri::command]
+fn play_activation_sound() -> Result<(), String> {
+    play_feedback_sound("start", "/System/Library/Sounds/Ping.aiff", "0.62", "0.55")
+}
+
+#[tauri::command]
+fn play_stop_sound() -> Result<(), String> {
+    play_feedback_sound("stop", "/System/Library/Sounds/Pop.aiff", "0.58", "0.40")
 }
 
 #[tauri::command]
@@ -292,6 +390,13 @@ async fn transcribe(samples: Vec<f32>) -> Result<String, String> {
             let mut state = context.create_state().map_err(|e| e.to_string())?;
             let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
             params.set_language(Some("en"));
+            params.set_n_threads(
+                std::thread::available_parallelism()
+                    .map(|count| count.get().min(8) as i32)
+                    .unwrap_or(4),
+            );
+            params.set_no_context(true);
+            params.set_no_timestamps(true);
             params.set_print_progress(false);
             params.set_print_realtime(false);
             params.set_print_timestamps(false);
@@ -333,6 +438,12 @@ struct PasteResult {
     focused_subrole: String,
 }
 
+fn text_for_paste(text: &str) -> String {
+    let mut output = text.trim_end().to_string();
+    output.push(' ');
+    output
+}
+
 #[tauri::command]
 fn paste_text(text: String, app_name: String, target_pid: i32) -> Result<PasteResult, String> {
     append_log(
@@ -350,7 +461,9 @@ fn paste_text(text: String, app_name: String, target_pid: i32) -> Result<PasteRe
         return Err("SpeakIt could not identify the app that had focus".into());
     }
     let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
-    clipboard.set_text(text).map_err(|e| e.to_string())?;
+    clipboard
+        .set_text(text_for_paste(&text))
+        .map_err(|e| e.to_string())?;
 
     // System Events performs both activation and paste in one accessibility-aware
     // transaction. It is more reliable for browser fields than posting raw HID
@@ -362,7 +475,7 @@ on run argv
     set targetProcess to first application process whose unix id is targetPid
     set frontmost of targetProcess to true
   end tell
-  delay 0.12
+  delay 0.06
   tell application "System Events"
     set targetProcess to first application process whose unix id is targetPid
     set focusedRole to "unknown"
@@ -431,6 +544,22 @@ fn frontmost_app() -> Result<String, String> {
 struct ActiveTarget {
     app_name: String,
     pid: i32,
+    anchor_x: f64,
+    anchor_y: f64,
+}
+
+fn parse_active_target(value: &str) -> ActiveTarget {
+    let mut parts = value.trim().splitn(4, "||");
+    let pid = parts.next().unwrap_or("0").parse::<i32>().unwrap_or(0);
+    let app_name = parts.next().unwrap_or_default().to_string();
+    let anchor_x = parts.next().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
+    let anchor_y = parts.next().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
+    ActiveTarget {
+        app_name,
+        pid,
+        anchor_x,
+        anchor_y,
+    }
 }
 
 #[tauri::command]
@@ -438,7 +567,15 @@ fn frontmost_target() -> Result<ActiveTarget, String> {
     let script = r#"
 tell application "System Events"
   set frontProcess to first application process whose frontmost is true
-  return (unix id of frontProcess as string) & "||" & (name of frontProcess)
+  set anchorX to 0
+  set anchorY to 0
+  try
+    set windowPosition to position of front window of frontProcess
+    set windowSize to size of front window of frontProcess
+    set anchorX to (item 1 of windowPosition) + ((item 1 of windowSize) / 2)
+    set anchorY to (item 2 of windowPosition) + ((item 2 of windowSize) / 2)
+  end try
+  return (unix id of frontProcess as string) & "||" & (name of frontProcess) & "||" & (anchorX as string) & "||" & (anchorY as string)
 end tell
 "#;
     let output = Command::new("osascript")
@@ -449,10 +586,15 @@ end tell
         return Err("Could not identify the active application".into());
     }
     let value = String::from_utf8_lossy(&output.stdout);
-    let mut parts = value.trim().splitn(2, "||");
-    let pid = parts.next().unwrap_or("0").parse::<i32>().unwrap_or(0);
-    let app_name = parts.next().unwrap_or_default().to_string();
-    Ok(ActiveTarget { app_name, pid })
+    let target = parse_active_target(&value);
+    append_log(
+        "target.captured",
+        &format!(
+            "app={} pid={} anchor_x={:.1} anchor_y={:.1}",
+            target.app_name, target.pid, target.anchor_x, target.anchor_y
+        ),
+    );
+    Ok(target)
 }
 
 #[tauri::command]
@@ -533,6 +675,7 @@ pub fn run() {
             download_model,
             transcribe,
             play_activation_sound,
+            play_stop_sound,
             paste_text,
             erase_trigger_space,
             focused_text_target,
@@ -543,6 +686,7 @@ pub fn run() {
             app_install_location,
             show_overlay,
             hide_overlay,
+            main_window_target,
             log_event,
             diagnostics
         ])
@@ -553,6 +697,28 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn active_target_parser_preserves_monitor_coordinates() {
+        let target = parse_active_target("90220||Google Chrome||-1889.0||713.0\n");
+        assert_eq!(target.pid, 90220);
+        assert_eq!(target.app_name, "Google Chrome");
+        assert_eq!(target.anchor_x, -1889.0);
+        assert_eq!(target.anchor_y, 713.0);
+    }
+
+    #[test]
+    fn overlay_is_bottom_centered_on_a_monitor_left_of_primary() {
+        let (x, y) = centered_overlay_position(-1920.0, 0.0, 1920.0, 1080.0);
+        assert_eq!(x, -1136.0);
+        assert_eq!(y, 972.0);
+    }
+
+    #[test]
+    fn consecutive_dictation_is_pasted_with_one_separator_space() {
+        assert_eq!(text_for_paste("Next sentence."), "Next sentence. ");
+        assert_eq!(text_for_paste("Next sentence.   "), "Next sentence. ");
+    }
 
     #[test]
     fn local_whisper_model_can_transcribe_audio() {
