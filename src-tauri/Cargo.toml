@@ -1,6 +1,6 @@
 [package]
 name = "speakit"
-version = "0.2.12"
+version = "0.2.13"
 description = "Free, local dictation for macOS"
 authors = ["SpeakIt"]
 edition = "2021"
@@ -15,7 +15,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
-whisper-rs = { version = "0.14", features = ["metal"] }
+whisper-rs = "0.14"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 tokio = { version = "1", features = ["fs", "io-util"] }
 futures-util = "0.3"

@@ -4,7 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import "./styles.css";
 
-type AppStatus = "ready" | "recording" | "transcribing" | "error";
+type AppStatus = "ready" | "starting" | "recording" | "transcribing" | "error";
 type FocusTarget = { appName: string; role: string; canPaste: boolean };
 type ActiveTarget = { appName: string; pid: number; anchorX: number; anchorY: number };
 type PasteResult = { focusedRole: string; focusedSubrole: string };
@@ -30,21 +30,33 @@ function renderOverlay() {
     </div>`;
   const bars = [...document.querySelectorAll<HTMLElement>(".waveform i")];
   let level = 0.08;
+  let overlayVisible = false;
+  let animationFrame: number | null = null;
   void listen<number>("waveform-level", (event) => { level = Math.max(0.06, Math.min(1, event.payload)); });
   void listen<boolean>("overlay-visibility", (event) => {
-    document.body.dataset.visible = String(event.payload);
+    overlayVisible = event.payload;
+    document.body.dataset.visible = String(overlayVisible);
+    if (overlayVisible && animationFrame === null) animationFrame = requestAnimationFrame(animate);
+    if (!overlayVisible && animationFrame !== null) {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+      bars.forEach((bar) => { bar.style.transform = "scaleY(.2)"; });
+    }
   });
   void currentWindow.setIgnoreCursorEvents(true).catch(() => undefined);
   void currentWindow.show();
   const animate = () => {
+    if (!overlayVisible) {
+      animationFrame = null;
+      return;
+    }
     const now = performance.now() / 120;
     bars.forEach((bar, index) => {
       const shape = 0.38 + Math.abs(Math.sin(now + index * 0.72)) * 0.62;
       bar.style.transform = `scaleY(${0.18 + level * shape * 1.35})`;
     });
-    requestAnimationFrame(animate);
+    animationFrame = requestAnimationFrame(animate);
   };
-  animate();
 }
 
 function renderMainApp() {
@@ -144,6 +156,7 @@ function renderMainApp() {
   let lastOverlayAnchorY = Number(localStorage.getItem("lastOverlayAnchorY")) || 0;
   let lastLevelUpdate = 0;
   let shortcutHeld = false;
+  let manualButtonHeld = false;
   let captureShortcut = false;
   let microphoneReady = localStorage.getItem("microphoneReady") === "true";
   let accessibilityReady = false;
@@ -194,6 +207,7 @@ function renderMainApp() {
       setStatus("error", "Download the speech model before dictating");
       return;
     }
+    setStatus("starting", "Starting microphone…");
     try {
       void invoke("play_activation_sound").catch((error) => logEvent("sound.start.failed", errorDetails(error)));
       logEvent("recording.start.requested", `shortcut=${shortcut} modelReady=${modelIsReady}`);
@@ -245,6 +259,7 @@ function renderMainApp() {
       logEvent("recording.started", `sampleRate=${audioContext.sampleRate} target=${focusTarget.appName} pid=${targetPid} anchorX=${target.anchorX.toFixed(1)} anchorY=${target.anchorY.toFixed(1)}`);
       setStatus("recording", focusTarget.canPaste ? `Listening for ${focusTarget.appName}…` : "Listening…");
       if (requireTextField && !shortcutHeld) await stopRecording();
+      if (!requireTextField && !manualButtonHeld) await stopRecording();
     } catch (error) {
       logEvent("recording.start.failed", errorDetails(error));
       await hideOverlay().catch(() => undefined);
@@ -255,19 +270,21 @@ function renderMainApp() {
 
   async function stopRecording() {
     if (status !== "recording" || !audioContext) return;
+    const activeAudioContext = audioContext;
+    audioContext = null;
+    setStatus("transcribing", "Turning speech into text…");
     void invoke("play_stop_sound").catch((error) => logEvent("sound.stop.failed", errorDetails(error)));
     await hideOverlay();
-    const inputRate = audioContext.sampleRate;
+    const inputRate = activeAudioContext.sampleRate;
     processor?.disconnect();
     source?.disconnect();
     mediaStream?.getTracks().forEach((track) => { track.enabled = false; });
-    await audioContext.close();
+    await activeAudioContext.close();
     const merged = mergeSamples(samples);
     const downsampled = downsample(merged, inputRate, 16000);
     logEvent("recording.stopped", `inputSamples=${merged.length} outputSamples=${downsampled.length} inputRate=${inputRate}`);
-    audioContext = null; processor = null; source = null; mediaStream = null;
+    processor = null; source = null; mediaStream = null;
     if (downsampled.length < 4000) { setStatus("ready", "Too short — try again"); return; }
-    setStatus("transcribing", "Turning speech into text…");
     let text: string;
     try {
       logEvent("transcription.requested", `samples=${downsampled.length}`);
@@ -363,8 +380,15 @@ function renderMainApp() {
     } catch (error) { setStatus("error", String(error)); renderShortcut(); }
   }, true);
 
-  recordButton.addEventListener("pointerdown", (event) => { event.preventDefault(); void startRecording(false); });
-  window.addEventListener("pointerup", () => void stopRecording());
+  recordButton.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    manualButtonHeld = true;
+    void startRecording(false);
+  });
+  window.addEventListener("pointerup", () => {
+    manualButtonHeld = false;
+    void stopRecording();
+  });
   copyButton.addEventListener("click", async () => {
     if (!transcript.classList.contains("placeholder")) await navigator.clipboard.writeText(transcript.textContent || "");
   });

@@ -7,7 +7,7 @@ No account, subscription, cloud transcription, or paid API is required.
 ## Features
 
 - Local English transcription with Whisper `small.en`
-- Apple Silicon Metal acceleration
+- Fast on-device transcription optimized for Apple Silicon
 - Customizable global push-to-talk shortcut
 - Automatic paste into the previously focused application
 - A click-through listening waveform that does not steal focus
