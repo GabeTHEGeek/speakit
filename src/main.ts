@@ -167,14 +167,12 @@ function renderMainApp() {
   let shortcutRegistered = false;
   let shortcutRecoveryInProgress = false;
   let shortcutSafetyTimer: number | null = null;
-  let microphoneReleaseTimer: number | null = null;
   const microphoneConstraints: MediaTrackConstraints = {
     channelCount: 1,
     echoCancellation: false,
     noiseSuppression: false,
     autoGainControl: false,
   };
-  const microphoneIdleReleaseMs = 60_000;
 
   function errorDetails(error: unknown) {
     if (error instanceof DOMException) return `${error.name}: ${error.message}`;
@@ -186,32 +184,12 @@ function renderMainApp() {
     void invoke("log_event", { event, details }).catch(() => undefined);
   }
 
-  function cancelMicrophoneRelease() {
-    if (microphoneReleaseTimer !== null) window.clearTimeout(microphoneReleaseTimer);
-    microphoneReleaseTimer = null;
-  }
-
   async function acquirePreparedStream() {
-    cancelMicrophoneRelease();
     if (!preparedStream || !preparedStream.active) {
       preparedStream = await navigator.mediaDevices.getUserMedia({ audio: microphoneConstraints });
       logEvent("microphone.acquired", "raw mono; voice processing disabled");
     }
     return preparedStream;
-  }
-
-  function scheduleMicrophoneRelease(reason: string) {
-    cancelMicrophoneRelease();
-    microphoneReleaseTimer = window.setTimeout(() => {
-      microphoneReleaseTimer = null;
-      if (status === "starting" || status === "recording") {
-        scheduleMicrophoneRelease("recording still active");
-        return;
-      }
-      preparedStream?.getTracks().forEach((track) => track.stop());
-      preparedStream = null;
-      logEvent("microphone.released", `reason=${reason} idle_ms=${microphoneIdleReleaseMs}`);
-    }, microphoneIdleReleaseMs);
   }
 
   function setStatus(next: AppStatus, message: string) {
@@ -318,7 +296,7 @@ function renderMainApp() {
     processor?.disconnect();
     source?.disconnect();
     mediaStream?.getTracks().forEach((track) => { track.enabled = false; });
-    scheduleMicrophoneRelease("dictation complete");
+    logEvent("microphone.warm", "raw stream ready; track disabled");
     await activeAudioContext.close();
     const merged = mergeSamples(samples);
     const downsampled = downsample(merged, inputRate, 16000);
@@ -490,7 +468,6 @@ function renderMainApp() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: microphoneConstraints });
       stream.getTracks().forEach((track) => { track.enabled = false; });
       preparedStream = stream;
-      scheduleMicrophoneRelease("permission setup");
       microphoneReady = true;
       localStorage.setItem("microphoneReady", "true");
       logEvent("permission.microphone.granted", stream.getAudioTracks()[0]?.label || "audio track");
@@ -581,7 +558,6 @@ function renderMainApp() {
       testSource.disconnect();
       await testContext.close();
       preparedStream.getTracks().forEach((track) => { track.enabled = false; });
-      scheduleMicrophoneRelease("diagnostics complete");
       micResult = micPeak > 0.0001
         ? "PASS — audio signal detected"
         : "WARNING — microphone is available, but the room was quiet during this test";
@@ -625,7 +601,6 @@ function renderMainApp() {
       const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: microphoneConstraints });
       permissionStream.getTracks().forEach((track) => { track.enabled = false; });
       preparedStream = permissionStream;
-      scheduleMicrophoneRelease("startup permission check");
       microphoneReady = true;
       localStorage.setItem("microphoneReady", "true");
       logEvent("permission.microphone.startup.granted", permissionStream.getAudioTracks()[0]?.label || "audio track");
@@ -663,7 +638,6 @@ function renderMainApp() {
     } catch (error) { modelState.textContent = `Setup needed: ${String(error)}`; }
   }
   window.addEventListener("beforeunload", () => {
-    cancelMicrophoneRelease();
     preparedStream?.getTracks().forEach((track) => track.stop());
   });
   void initialize();
