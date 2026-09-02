@@ -43,7 +43,10 @@ function renderOverlay() {
       bars.forEach((bar) => { bar.style.transform = "scaleY(.2)"; });
     }
   });
-  void currentWindow.setIgnoreCursorEvents(true).catch(() => undefined);
+  void (async () => {
+    await currentWindow.setIgnoreCursorEvents(true).catch(() => undefined);
+    await currentWindow.show().catch(() => undefined);
+  })();
   const animate = () => {
     if (!overlayVisible) {
       animationFrame = null;
