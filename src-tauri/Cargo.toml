@@ -1,6 +1,6 @@
 [package]
 name = "speakit"
-version = "0.2.22"
+version = "0.2.23"
 description = "Free, local dictation for macOS"
 authors = ["SpeakIt"]
 edition = "2021"

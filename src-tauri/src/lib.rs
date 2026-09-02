@@ -460,6 +460,39 @@ fn finalize_transcript(text: &str) -> String {
     if output.is_empty() {
         return output;
     }
+    let sound_label = output
+        .to_lowercase()
+        .chars()
+        .map(|character| {
+            if character.is_alphanumeric() {
+                character
+            } else {
+                ' '
+            }
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if matches!(
+        sound_label.as_str(),
+        "beep"
+            | "beep beep"
+            | "ping"
+            | "pop"
+            | "chime"
+            | "bell"
+            | "bell rings"
+            | "music"
+            | "blank audio"
+            | "silence"
+    ) {
+        append_log(
+            "transcription.native.filtered",
+            &format!("label={sound_label}"),
+        );
+        return String::new();
+    }
     let has_terminal_punctuation = output
         .trim_end_matches(['"', '\'', ')', ']', '}'])
         .ends_with(['.', '!', '?', '…']);
@@ -781,6 +814,16 @@ mod tests {
         assert_eq!(finalize_transcript("Is this ready?"), "Is this ready?");
         assert_eq!(finalize_transcript("Yes!"), "Yes!");
         assert_eq!(finalize_transcript(""), "");
+    }
+
+    #[test]
+    fn isolated_sound_labels_are_not_pasted() {
+        assert_eq!(finalize_transcript("(beep)"), "");
+        assert_eq!(finalize_transcript("[PING]"), "");
+        assert_eq!(
+            finalize_transcript("The beep means recording started"),
+            "The beep means recording started."
+        );
     }
 
     #[test]
