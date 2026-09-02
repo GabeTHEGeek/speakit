@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
+import { isRegistered, register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import "./styles.css";
 
 type AppStatus = "ready" | "starting" | "recording" | "transcribing" | "error";
@@ -44,7 +44,6 @@ function renderOverlay() {
     }
   });
   void currentWindow.setIgnoreCursorEvents(true).catch(() => undefined);
-  void currentWindow.show();
   const animate = () => {
     if (!overlayVisible) {
       animationFrame = null;
@@ -162,6 +161,8 @@ function renderMainApp() {
   let accessibilityReady = false;
   let modelIsReady = false;
   let shortcutRegistered = false;
+  let shortcutRecoveryInProgress = false;
+  let shortcutSafetyTimer: number | null = null;
 
   function errorDetails(error: unknown) {
     if (error instanceof DOMException) return `${error.name}: ${error.message}`;
@@ -321,25 +322,66 @@ function renderMainApp() {
   }
 
   async function bindShortcut(value: string, previous?: string) {
-    if (previous) await unregister(previous);
+    if (previous && await isRegistered(previous).catch(() => false)) await unregister(previous);
     try {
       await register(value, (event) => {
         if (event.state === "Pressed" && !shortcutHeld) {
           logEvent("shortcut.pressed", event.shortcut);
           shortcutHeld = true;
+          if (shortcutSafetyTimer !== null) window.clearTimeout(shortcutSafetyTimer);
+          shortcutSafetyTimer = window.setTimeout(() => {
+            if (!shortcutHeld) return;
+            shortcutHeld = false;
+            logEvent("shortcut.safety_reset", event.shortcut);
+            void stopRecording();
+          }, 60_000);
           void startRecording(true);
         }
         if (event.state === "Released" && shortcutHeld) {
           logEvent("shortcut.released", event.shortcut);
           shortcutHeld = false;
+          if (shortcutSafetyTimer !== null) window.clearTimeout(shortcutSafetyTimer);
+          shortcutSafetyTimer = null;
           void stopRecording();
         }
       });
+      shortcutRegistered = true;
+      logEvent("shortcut.registered", value);
     } catch (error) {
+      shortcutRegistered = false;
+      logEvent("shortcut.registration_failed", `${value} ${errorDetails(error)}`);
       if (previous) await bindShortcut(previous);
       throw error;
     }
   }
+
+  async function ensureShortcutRegistration(reason: string) {
+    if (!modelIsReady || captureShortcut || shortcutRecoveryInProgress) return;
+    shortcutRecoveryInProgress = true;
+    try {
+      const registered = await isRegistered(shortcut);
+      shortcutRegistered = registered;
+      if (registered) return;
+      shortcutHeld = false;
+      await bindShortcut(shortcut);
+      logEvent("shortcut.recovered", reason);
+    } catch (error) {
+      shortcutRegistered = false;
+      logEvent("shortcut.recovery_failed", `${reason} ${errorDetails(error)}`);
+      if (status === "ready") {
+        setStatus("error", "Shortcut unavailable — quit other SpeakIt copies and reopen");
+      }
+    } finally {
+      shortcutRecoveryInProgress = false;
+    }
+  }
+
+  window.addEventListener("focus", () => void ensureShortcutRegistration("window.focus"));
+  window.addEventListener("blur", () => window.setTimeout(() => void ensureShortcutRegistration("window.blur"), 150));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void ensureShortcutRegistration("document.visible");
+  });
+  window.setInterval(() => void ensureShortcutRegistration("watchdog"), 5_000);
 
   function shortcutFromEvent(event: KeyboardEvent) {
     const modifiers: string[] = [];

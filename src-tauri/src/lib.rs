@@ -149,6 +149,10 @@ fn centered_overlay_position(
 #[tauri::command]
 fn show_overlay(app: tauri::AppHandle, anchor_x: f64, anchor_y: f64) -> Result<(), String> {
     position_overlay_window(&app, anchor_x, anchor_y)?;
+    app.get_webview_window("overlay")
+        .ok_or("Waveform window is unavailable")?
+        .show()
+        .map_err(|e| e.to_string())?;
     app.emit_to("overlay", "overlay-visibility", true)
         .map_err(|e| e.to_string())
 }
@@ -156,6 +160,10 @@ fn show_overlay(app: tauri::AppHandle, anchor_x: f64, anchor_y: f64) -> Result<(
 #[tauri::command]
 fn hide_overlay(app: tauri::AppHandle) -> Result<(), String> {
     app.emit_to("overlay", "overlay-visibility", false)
+        .map_err(|e| e.to_string())?;
+    app.get_webview_window("overlay")
+        .ok_or("Waveform window is unavailable")?
+        .hide()
         .map_err(|e| e.to_string())
 }
 
