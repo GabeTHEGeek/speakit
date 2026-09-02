@@ -165,6 +165,14 @@ function renderMainApp() {
   let shortcutRegistered = false;
   let shortcutRecoveryInProgress = false;
   let shortcutSafetyTimer: number | null = null;
+  let microphoneReleaseTimer: number | null = null;
+  const microphoneConstraints: MediaTrackConstraints = {
+    channelCount: 1,
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+  };
+  const microphoneIdleReleaseMs = 60_000;
 
   function errorDetails(error: unknown) {
     if (error instanceof DOMException) return `${error.name}: ${error.message}`;
@@ -174,6 +182,34 @@ function renderMainApp() {
 
   function logEvent(event: string, details = "") {
     void invoke("log_event", { event, details }).catch(() => undefined);
+  }
+
+  function cancelMicrophoneRelease() {
+    if (microphoneReleaseTimer !== null) window.clearTimeout(microphoneReleaseTimer);
+    microphoneReleaseTimer = null;
+  }
+
+  async function acquirePreparedStream() {
+    cancelMicrophoneRelease();
+    if (!preparedStream || !preparedStream.active) {
+      preparedStream = await navigator.mediaDevices.getUserMedia({ audio: microphoneConstraints });
+      logEvent("microphone.acquired", "raw mono; voice processing disabled");
+    }
+    return preparedStream;
+  }
+
+  function scheduleMicrophoneRelease(reason: string) {
+    cancelMicrophoneRelease();
+    microphoneReleaseTimer = window.setTimeout(() => {
+      microphoneReleaseTimer = null;
+      if (status === "starting" || status === "recording") {
+        scheduleMicrophoneRelease("recording still active");
+        return;
+      }
+      preparedStream?.getTracks().forEach((track) => track.stop());
+      preparedStream = null;
+      logEvent("microphone.released", `reason=${reason} idle_ms=${microphoneIdleReleaseMs}`);
+    }, microphoneIdleReleaseMs);
   }
 
   function setStatus(next: AppStatus, message: string) {
@@ -225,9 +261,7 @@ function renderMainApp() {
       if (requireTextField && shortcut.endsWith("+Space") && !/(Command|Control)/.test(shortcut)) {
         await invoke("erase_trigger_space");
       }
-      if (!preparedStream || !preparedStream.active) {
-        preparedStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
-      }
+      preparedStream = await acquirePreparedStream();
       preparedStream.getTracks().forEach((track) => { track.enabled = true; });
       mediaStream = preparedStream;
       audioContext = new AudioContext();
@@ -282,6 +316,7 @@ function renderMainApp() {
     processor?.disconnect();
     source?.disconnect();
     mediaStream?.getTracks().forEach((track) => { track.enabled = false; });
+    scheduleMicrophoneRelease("dictation complete");
     await activeAudioContext.close();
     const merged = mergeSamples(samples);
     const downsampled = downsample(merged, inputRate, 16000);
@@ -450,9 +485,10 @@ function renderMainApp() {
     try {
       enableMic.disabled = true;
       micCheck.textContent = "Waiting…";
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: microphoneConstraints });
       stream.getTracks().forEach((track) => { track.enabled = false; });
       preparedStream = stream;
+      scheduleMicrophoneRelease("permission setup");
       microphoneReady = true;
       localStorage.setItem("microphoneReady", "true");
       logEvent("permission.microphone.granted", stream.getAudioTracks()[0]?.label || "audio track");
@@ -524,7 +560,7 @@ function renderMainApp() {
     let micPeak = 0;
     let micLabel = "unknown";
     try {
-      if (!preparedStream || !preparedStream.active) preparedStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      preparedStream = await acquirePreparedStream();
       preparedStream.getTracks().forEach((track) => { track.enabled = true; });
       micLabel = preparedStream.getAudioTracks()[0]?.label || "audio track";
       const testContext = new AudioContext();
@@ -543,6 +579,7 @@ function renderMainApp() {
       testSource.disconnect();
       await testContext.close();
       preparedStream.getTracks().forEach((track) => { track.enabled = false; });
+      scheduleMicrophoneRelease("diagnostics complete");
       micResult = micPeak > 0.0001
         ? "PASS — audio signal detected"
         : "WARNING — microphone is available, but the room was quiet during this test";
@@ -583,9 +620,10 @@ function renderMainApp() {
     await refreshAccessibility();
     if (!accessibilityReady) void invoke("request_accessibility_permission");
     try {
-      const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: microphoneConstraints });
       permissionStream.getTracks().forEach((track) => { track.enabled = false; });
       preparedStream = permissionStream;
+      scheduleMicrophoneRelease("startup permission check");
       microphoneReady = true;
       localStorage.setItem("microphoneReady", "true");
       logEvent("permission.microphone.startup.granted", permissionStream.getAudioTracks()[0]?.label || "audio track");
@@ -622,6 +660,10 @@ function renderMainApp() {
       }
     } catch (error) { modelState.textContent = `Setup needed: ${String(error)}`; }
   }
+  window.addEventListener("beforeunload", () => {
+    cancelMicrophoneRelease();
+    preparedStream?.getTracks().forEach((track) => track.stop());
+  });
   void initialize();
 }
 
