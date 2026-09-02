@@ -680,8 +680,17 @@ end tell
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    append_log("window.hidden", "close button; app remains active");
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             model_ready,
             prepare_model,
@@ -703,8 +712,18 @@ pub fn run() {
             log_event,
             diagnostics
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running SpeakIt");
+        .build(tauri::generate_context!())
+        .expect("error while building SpeakIt");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Reopen { .. } = event {
+            if let Some(window) = app_handle.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+                append_log("window.reopened", "dock icon");
+            }
+        }
+    });
 }
 
 #[cfg(test)]

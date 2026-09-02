@@ -9,6 +9,7 @@ No account, subscription, cloud transcription, or paid API is required.
 - Local English transcription with Whisper `small.en`
 - Fast on-device transcription optimized for Apple Silicon
 - Customizable global push-to-talk shortcut
+- Background operation after the main window is closed
 - Automatic paste into the previously focused application
 - A click-through listening waveform that does not steal focus
 - Bottom-center overlay placement on the monitor containing the focused app
@@ -43,6 +44,8 @@ Run SpeakIt from Applications rather than directly from the mounted installer. m
 5. SpeakIt transcribes locally, restores the original app, and pastes the text.
 
 The shortcut can be changed from the SpeakIt window and is saved between launches. The listening overlay appears on the monitor containing the focused application window and remains there for that recording.
+
+Closing the SpeakIt window keeps dictation active in the background. Click the SpeakIt Dock icon to reopen the window, or use **Command-Q** when you want to quit SpeakIt completely.
 
 ## Privacy
 
