@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src-tauri/icons/speakit-icon-v2.png" width="150" alt="SpeakIt icon">
+  <img src="src-tauri/icons/speakit-icon-v3.png" width="150" alt="SpeakIt icon">
 </p>
 
 <h1 align="center">SpeakIt</h1>
