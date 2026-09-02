@@ -150,13 +150,25 @@ fn centered_overlay_position(
 fn show_overlay(app: tauri::AppHandle, anchor_x: f64, anchor_y: f64) -> Result<(), String> {
     position_overlay_window(&app, anchor_x, anchor_y)?;
     app.emit_to("overlay", "overlay-visibility", true)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    let window = app
+        .get_webview_window("overlay")
+        .ok_or("Waveform window is unavailable")?;
+    window.show().map_err(|e| e.to_string())?;
+    append_log("overlay.shown", "native window visible");
+    Ok(())
 }
 
 #[tauri::command]
 fn hide_overlay(app: tauri::AppHandle) -> Result<(), String> {
     app.emit_to("overlay", "overlay-visibility", false)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    let window = app
+        .get_webview_window("overlay")
+        .ok_or("Waveform window is unavailable")?;
+    window.hide().map_err(|e| e.to_string())?;
+    append_log("overlay.hidden", "native window sleeping");
+    Ok(())
 }
 
 #[tauri::command]
@@ -716,11 +728,19 @@ pub fn run() {
         .expect("error while building SpeakIt");
 
     app.run(|app_handle, event| {
-        if let tauri::RunEvent::Reopen { .. } = event {
-            if let Some(window) = app_handle.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-                append_log("window.reopened", "dock icon");
+        if let tauri::RunEvent::Reopen {
+            has_visible_windows,
+            ..
+        } = event
+        {
+            if !has_visible_windows {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    append_log("window.reopened", "dock icon; no visible windows");
+                }
+            } else {
+                append_log("window.reopen.ignored", "another SpeakIt window is visible");
             }
         }
     });

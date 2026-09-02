@@ -45,7 +45,6 @@ function renderOverlay() {
   });
   void (async () => {
     await currentWindow.setIgnoreCursorEvents(true).catch(() => undefined);
-    await currentWindow.show().catch(() => undefined);
   })();
   const animate = () => {
     if (!overlayVisible) {
