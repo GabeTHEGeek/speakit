@@ -413,7 +413,7 @@ async fn transcribe(samples: Vec<f32>) -> Result<String, String> {
                         .map_err(|e| e.to_string())?,
                 );
             }
-            Ok(result.trim().to_string())
+            Ok(finalize_transcript(&result))
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -441,6 +441,20 @@ struct PasteResult {
 fn text_for_paste(text: &str) -> String {
     let mut output = text.trim_end().to_string();
     output.push(' ');
+    output
+}
+
+fn finalize_transcript(text: &str) -> String {
+    let mut output = text.trim().to_string();
+    if output.is_empty() {
+        return output;
+    }
+    let has_terminal_punctuation = output
+        .trim_end_matches(['"', '\'', ')', ']', '}'])
+        .ends_with(['.', '!', '?', '…']);
+    if !has_terminal_punctuation {
+        output.push('.');
+    }
     output
 }
 
@@ -718,6 +732,17 @@ mod tests {
     fn consecutive_dictation_is_pasted_with_one_separator_space() {
         assert_eq!(text_for_paste("Next sentence."), "Next sentence. ");
         assert_eq!(text_for_paste("Next sentence.   "), "Next sentence. ");
+    }
+
+    #[test]
+    fn transcription_always_has_terminal_punctuation() {
+        assert_eq!(
+            finalize_transcript("This is a sentence"),
+            "This is a sentence."
+        );
+        assert_eq!(finalize_transcript("Is this ready?"), "Is this ready?");
+        assert_eq!(finalize_transcript("Yes!"), "Yes!");
+        assert_eq!(finalize_transcript(""), "");
     }
 
     #[test]
