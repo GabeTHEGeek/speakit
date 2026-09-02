@@ -382,7 +382,7 @@ async fn transcribe(samples: Vec<f32>) -> Result<String, String> {
     let started = Instant::now();
     append_log(
         "transcription.native.start",
-        &format!("samples={}", samples.len()),
+        &format!("samples={} threads=4", samples.len()),
     );
     let result: Result<String, String> =
         tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
@@ -390,13 +390,12 @@ async fn transcribe(samples: Vec<f32>) -> Result<String, String> {
             let mut state = context.create_state().map_err(|e| e.to_string())?;
             let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
             params.set_language(Some("en"));
-            params.set_n_threads(
-                std::thread::available_parallelism()
-                    .map(|count| count.get().min(8) as i32)
-                    .unwrap_or(4),
-            );
+            // Four performance cores are consistently faster than spreading this
+            // short interactive workload across every M-series core.
+            params.set_n_threads(4);
             params.set_no_context(true);
             params.set_no_timestamps(true);
+            params.set_single_segment(true);
             params.set_print_progress(false);
             params.set_print_realtime(false);
             params.set_print_timestamps(false);
