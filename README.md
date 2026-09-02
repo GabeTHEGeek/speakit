@@ -10,6 +10,7 @@
   <img src="https://img.shields.io/badge/macOS-13%2B-1f2421?style=flat-square&logo=apple&logoColor=white" alt="macOS 13 or newer">
   <img src="https://img.shields.io/badge/transcription-100%25%20local-ef603f?style=flat-square" alt="100 percent local transcription">
   <img src="https://img.shields.io/badge/cost-free-4a9c68?style=flat-square" alt="Free to use">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-4468a6?style=flat-square" alt="GNU General Public License v3.0"></a>
 </p>
 
 <p align="center"><strong>Produced and created by Gabriel Pendleton.</strong></p>
@@ -93,3 +94,11 @@ SpeakIt currently focuses on English voice-to-text dictation for macOS. Google C
 ## Creator
 
 SpeakIt was conceived, produced, and created by **Gabriel Pendleton**.
+
+## License
+
+Copyright © 2026 Gabriel Pendleton.
+
+SpeakIt is free software licensed under the **GNU General Public License v3.0**. You may use, study, modify, and distribute it under the terms of the GPL-3.0. Distributed modifications must remain open source under the same license and preserve the required notices.
+
+See the full [LICENSE](LICENSE) or read the [GPL-3.0 overview](https://choosealicense.com/licenses/gpl-3.0/).

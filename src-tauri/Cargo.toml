@@ -3,6 +3,8 @@ name = "speakit"
 version = "0.2.23"
 description = "Free, local dictation for macOS"
 authors = ["SpeakIt"]
+license = "GPL-3.0-only"
+repository = "https://github.com/GabeTHEGeek/speakit"
 edition = "2021"
 
 [lib]
