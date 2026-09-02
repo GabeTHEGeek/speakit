@@ -1,8 +1,26 @@
-# SpeakIt
+<p align="center">
+  <img src="src-tauri/icons/speakit-icon-v2.png" width="150" alt="SpeakIt icon">
+</p>
+
+<h1 align="center">SpeakIt</h1>
+
+<p align="center"><strong>Free, private, on-device dictation for macOS.</strong></p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-13%2B-1f2421?style=flat-square&logo=apple&logoColor=white" alt="macOS 13 or newer">
+  <img src="https://img.shields.io/badge/transcription-100%25%20local-ef603f?style=flat-square" alt="100 percent local transcription">
+  <img src="https://img.shields.io/badge/cost-free-4a9c68?style=flat-square" alt="Free to use">
+</p>
+
+<p align="center"><strong>Produced and created by Gabriel Pendleton.</strong></p>
 
 SpeakIt is a free, local, Mac-first dictation app. Focus a text box, hold your shortcut, speak, and release. SpeakIt transcribes your voice on-device and pastes the result back into the app you were using.
 
 No account, subscription, cloud transcription, or paid API is required.
+
+<p align="center">
+  <img src="docs/speakit-workflow.svg" width="100%" alt="Hold your shortcut, speak, and paste into the focused text field">
+</p>
 
 ## Features
 
@@ -71,3 +89,7 @@ Use **Run check** in SpeakIt's System diagnostics section to verify the micropho
 ## Current scope
 
 SpeakIt currently focuses on English voice-to-text dictation for macOS. Google Calendar integration and local note storage are not included in the current version.
+
+## Creator
+
+SpeakIt was conceived, produced, and created by **Gabriel Pendleton**.

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title description">
+  <title id="title">SpeakIt dictation workflow</title>
+  <desc id="description">Hold your shortcut, speak naturally, and SpeakIt pastes local transcription into the focused text field.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffaf2"/>
+      <stop offset="1" stop-color="#f2eee4"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8a68"/>
+      <stop offset="1" stop-color="#e94f32"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="13" flood-color="#50372d" flood-opacity=".12"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="320" rx="30" fill="url(#background)"/>
+  <circle cx="80" cy="44" r="105" fill="#ef603f" opacity=".07"/>
+  <circle cx="1140" cy="286" r="150" fill="#ef603f" opacity=".06"/>
+
+  <g filter="url(#shadow)">
+    <rect x="58" y="62" width="300" height="196" rx="24" fill="#fffdf9"/>
+    <rect x="450" y="62" width="300" height="196" rx="24" fill="#fffdf9"/>
+    <rect x="842" y="62" width="300" height="196" rx="24" fill="#fffdf9"/>
+  </g>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" text-anchor="middle">
+    <g transform="translate(208 116)">
+      <rect x="-72" y="-27" width="144" height="54" rx="15" fill="#272b29"/>
+      <text y="7" fill="#fff" font-size="21" font-weight="700">⇧  +  C</text>
+      <text y="83" fill="#252a27" font-size="25" font-weight="750">Hold</text>
+      <text y="113" fill="#7d817c" font-size="15">Your global shortcut</text>
+    </g>
+
+    <g transform="translate(600 116)">
+      <circle r="35" fill="url(#accent)"/>
+      <rect x="-9" y="-19" width="18" height="29" rx="9" fill="#fff"/>
+      <path d="M-16 4v2a16 16 0 0 0 32 0V4M0 22v10M-11 32h22" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+      <text y="83" fill="#252a27" font-size="25" font-weight="750">Speak</text>
+      <text y="113" fill="#7d817c" font-size="15">Natural, private dictation</text>
+    </g>
+
+    <g transform="translate(992 116)">
+      <rect x="-44" y="-31" width="88" height="62" rx="11" fill="#272b29"/>
+      <path d="M-26-10h52M-26 3h43M-26 16h33" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="33" cy="23" r="11" fill="#ef603f"/>
+      <text y="83" fill="#252a27" font-size="25" font-weight="750">Paste</text>
+      <text y="113" fill="#7d817c" font-size="15">Into the focused text field</text>
+    </g>
+  </g>
+
+  <g fill="none" stroke="#ef603f" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity=".72">
+    <path d="M376 160h50"/>
+    <path d="m416 150 10 10-10 10"/>
+    <path d="M768 160h50"/>
+    <path d="m808 150 10 10-10 10"/>
+  </g>
+</svg>

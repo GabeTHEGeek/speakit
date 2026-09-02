@@ -5,7 +5,7 @@ button { font: inherit; }
 .shell { min-height: 100vh; padding: 30px 42px 22px; display: flex; flex-direction: column; }
 header { display: flex; align-items: center; justify-content: space-between; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; letter-spacing: -.02em; }
-.brand-mark { display: grid; place-items: center; width: 30px; height: 30px; color: white; border-radius: 9px; background: #ef603f; box-shadow: 0 5px 14px #ef603f4d; }
+.brand-mark { display: block; width: 30px; height: 30px; border-radius: 9px; object-fit: cover; box-shadow: 0 5px 14px #ef603f4d; }
 .local-pill { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid #d9d6cd; border-radius: 999px; color: #696d68; font-size: 12px; background: #ffffff8c; }
 .local-pill i { width: 7px; height: 7px; border-radius: 50%; background: #47a66a; box-shadow: 0 0 0 3px #47a66a1f; }
 .hero { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-top: 24px; }
@@ -56,7 +56,7 @@ body[data-status="transcribing"] .record-button { background: #757c77; box-shado
 .permission-setup { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 28px; background: #eeebe3f2; backdrop-filter: blur(16px); transition: opacity .2s, visibility .2s; }
 .permission-setup.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 .permission-panel { width: 510px; max-width: 100%; padding: 34px; border: 1px solid #d8d4ca; border-radius: 26px; text-align: center; background: #fffdf8; box-shadow: 0 28px 80px #443d2e25; }
-.permission-logo { width: 52px; height: 52px; margin: 0 auto 18px; display: grid; place-items: center; border-radius: 15px; color: white; background: linear-gradient(145deg, #ff7656, #e84d31); box-shadow: 0 10px 24px #e84d3142; font-size: 22px; font-weight: 800; }
+.permission-logo { width: 52px; height: 52px; margin: 0 auto 18px; display: block; border-radius: 15px; object-fit: cover; box-shadow: 0 10px 24px #e84d3142; }
 .permission-panel h2 { margin: 11px 0 10px; font-family: Georgia, "Times New Roman", serif; font-size: 32px; line-height: 1.08; letter-spacing: -.035em; font-weight: 500; }
 .permission-panel > p { margin: 0 auto 24px; max-width: 380px; color: #7d807b; font-size: 13px; line-height: 1.5; }
 .permission-row { width: 100%; margin-top: 10px; padding: 14px; display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 12px; border: 1px solid #dedbd2; border-radius: 15px; text-align: left; color: #292f2c; background: white; cursor: pointer; }

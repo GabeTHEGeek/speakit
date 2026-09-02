@@ -4,6 +4,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isRegistered, register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import "./styles.css";
 
+const speakitIconUrl = new URL("../src-tauri/icons/speakit-icon-v2.png", import.meta.url).href;
+
 type AppStatus = "ready" | "starting" | "recording" | "transcribing" | "error";
 type FocusTarget = { appName: string; role: string; canPaste: boolean };
 type ActiveTarget = { appName: string; pid: number; anchorX: number; anchorY: number };
@@ -65,7 +67,7 @@ function renderMainApp() {
   app.innerHTML = `
     <main class="shell">
       <header>
-        <div class="brand"><span class="brand-mark">S</span><span>SpeakIt</span></div>
+        <div class="brand"><img class="brand-mark" src="${speakitIconUrl}" alt=""><span>SpeakIt</span></div>
         <span class="local-pill"><i></i> 100% local</span>
       </header>
       <section class="hero">
@@ -93,7 +95,7 @@ function renderMainApp() {
     </main>
     <div id="permission-setup" class="permission-setup">
       <section class="permission-panel">
-        <div class="permission-logo">S</div>
+        <img class="permission-logo" src="${speakitIconUrl}" alt="SpeakIt">
         <div class="eyebrow">QUICK SETUP</div>
         <h2>Give SpeakIt permission<br>to listen and type.</h2>
         <p>Both permissions stay on your Mac and are required before dictation can work.</p>
@@ -110,7 +112,7 @@ function renderMainApp() {
     </div>
     <div id="model-setup" class="permission-setup model-setup">
       <section class="permission-panel">
-        <div class="permission-logo">↓</div>
+        <img class="permission-logo" src="${speakitIconUrl}" alt="SpeakIt">
         <div class="eyebrow">LOCAL SPEECH MODEL</div>
         <h2>Download transcription<br>before you begin.</h2>
         <p>SpeakIt needs the free Whisper small English model. It is about 466 MB and stays entirely on this Mac.</p>
