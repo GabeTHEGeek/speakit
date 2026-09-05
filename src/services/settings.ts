@@ -4,11 +4,19 @@ const keys = {
   shortcut: "dictationShortcut",
   overlayX: "lastOverlayAnchorX",
   overlayY: "lastOverlayAnchorY",
+  speechEngine: "speechEngine",
+  canaryDefaultApplied: "canaryDefaultAppliedV1",
 } as const;
+
+export type SpeechEngine = "whisper" | "canary";
 
 export const settings = {
   get shortcut() { return localStorage.getItem(keys.shortcut) || "CommandOrControl+Shift+Space"; },
   set shortcut(value: string) { localStorage.setItem(keys.shortcut, value); },
+  get speechEngine(): SpeechEngine { return localStorage.getItem(keys.speechEngine) === "whisper" ? "whisper" : "canary"; },
+  set speechEngine(value: SpeechEngine) { localStorage.setItem(keys.speechEngine, value); },
+  get canaryDefaultApplied() { return localStorage.getItem(keys.canaryDefaultApplied) === "true"; },
+  set canaryDefaultApplied(value: boolean) { localStorage.setItem(keys.canaryDefaultApplied, String(value)); },
   get microphoneReady() { return localStorage.getItem(keys.microphoneReady) === "true"; },
   set microphoneReady(value: boolean) {
     if (value) localStorage.setItem(keys.microphoneReady, "true");

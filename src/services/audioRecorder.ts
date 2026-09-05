@@ -1,5 +1,6 @@
 import { emitTo } from "@tauri-apps/api/event";
 import { logEvent } from "../platform/native";
+import { AdaptiveAudioLevel } from "./audioLevel";
 
 export const microphoneConstraints: MediaTrackConstraints = {
   channelCount: 1,
@@ -20,6 +21,7 @@ export class AudioRecorder {
   private preparedStream: MediaStream | null = null;
   private samples: Float32Array[] = [];
   private lastLevelUpdate = 0;
+  private levelMeter = new AdaptiveAudioLevel();
 
   async prepare() {
     if (!this.preparedStream || !this.preparedStream.active) {
@@ -38,9 +40,12 @@ export class AudioRecorder {
     stream.getTracks().forEach((track) => { track.enabled = true; });
     this.mediaStream = stream;
     this.audioContext = new AudioContext();
+    if (this.audioContext.state === "suspended") await this.audioContext.resume();
     this.source = this.audioContext.createMediaStreamSource(stream);
     this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
     this.samples = [];
+    this.levelMeter.reset();
+    void emitTo("overlay", "waveform-level", 0);
     this.processor.onaudioprocess = (event) => {
       const chunk = new Float32Array(event.inputBuffer.getChannelData(0));
       this.samples.push(chunk);
@@ -49,7 +54,7 @@ export class AudioRecorder {
         let power = 0;
         for (let i = 0; i < chunk.length; i += 8) power += chunk[i] * chunk[i];
         const rms = Math.sqrt(power / Math.ceil(chunk.length / 8));
-        void emitTo("overlay", "waveform-level", Math.min(1, rms * 9));
+        void emitTo("overlay", "waveform-level", this.levelMeter.update(rms));
         this.lastLevelUpdate = now;
       }
     };
@@ -73,6 +78,8 @@ export class AudioRecorder {
     this.processor = null;
     this.source = null;
     this.mediaStream = null;
+    this.levelMeter.reset();
+    void emitTo("overlay", "waveform-level", 0);
     return { downsampled, inputRate, inputSamples: merged.length };
   }
 

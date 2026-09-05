@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>SpeakIt layout check</title></head>
+<body><div id="app"></div>
+<script type="module">
+  // UI-only fixture: no microphone, native commands, or real history storage.
+  import "../src/styles.css";
+  import { renderMainView } from "../src/ui/mainView.ts";
+  import { renderHistory } from "../src/ui/historyView.ts";
+  import { createHistoryStore } from "../src/features/history/historyStore.ts";
+  import { setupNavigation } from "../src/ui/navigation.ts";
+  const view = renderMainView("/src-tauri/icons/speakit-icon-v3.png");
+  setupNavigation(view);
+  const mode = new URLSearchParams(location.search).get("mode");
+  if (mode !== "permissions") view.permissionSetup.classList.add("hidden");
+  if (mode !== "model") view.modelSetup.classList.add("hidden");
+  view.modelState.textContent = "Whisper small.en ready";
+  view.shortcutDisplay.innerHTML = "<kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd><span>Hold anywhere</span>";
+  const store = createHistoryStore({ getItem: () => null, setItem() {} });
+  if (mode !== "empty") {
+    for (let index = 1; index <= 5; index++) store.add(`Example dictation ${index}. A local transcription that can be copied or deleted.`);
+  }
+  renderHistory(view.history, store, console.error);
+  if (mode === "history") view.navHistory.click();
+  if (mode === "models") view.navModels.click();
+  if (mode === "delete") {
+    view.history.querySelector('[aria-label^="Delete"]').click();
+    if (store.list().length !== 4 || view.history.children.length !== 4) throw new Error("Delete failed");
+  }
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  document.body.dataset.horizontalOverflow = String(document.documentElement.scrollWidth > innerWidth);
+  document.body.dataset.historyCount = String(store.list().length);
+</script></body></html>

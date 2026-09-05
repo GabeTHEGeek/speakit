@@ -1,3 +1,4 @@
+mod canary;
 mod diagnostics;
 mod feedback;
 mod insertion;
@@ -6,6 +7,7 @@ mod overlay;
 mod permissions;
 mod speech;
 
+use canary::{canary_ready, download_canary_model, prepare_canary_model};
 use diagnostics::diagnostics;
 use feedback::{play_activation_sound, play_stop_sound};
 use insertion::{
@@ -35,6 +37,9 @@ pub fn run() {
             prepare_model,
             download_model,
             transcribe,
+            canary_ready,
+            download_canary_model,
+            prepare_canary_model,
             play_activation_sound,
             play_stop_sound,
             paste_text,

@@ -37,8 +37,9 @@ pub(crate) fn paste_text(
         return Err("SpeakIt could not identify the app that had focus".into());
     }
     let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+    let inserted = text_for_paste(&text);
     clipboard
-        .set_text(text_for_paste(&text))
+        .set_text(inserted.clone())
         .map_err(|e| e.to_string())?;
 
     let paste_script = r#"
@@ -94,10 +95,37 @@ end run
         "paste.complete",
         &format!("app={app_name} pid={target_pid} role={focused_role} subrole={focused_subrole}"),
     );
+    clear_pasted_text_later(inserted);
     Ok(PasteResult {
         focused_role,
         focused_subrole,
     })
+}
+
+fn clipboard_still_contains_dictation(
+    current: Result<String, arboard::Error>,
+    inserted: &str,
+) -> bool {
+    current.is_ok_and(|text| text == inserted)
+}
+
+fn clear_pasted_text_later(inserted: String) {
+    std::thread::spawn(move || {
+        // Give the target time to consume asynchronous Command-V without
+        // delaying the UI or the next recording. Failed pastes retain the text.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let Ok(mut clipboard) = arboard::Clipboard::new() else {
+            append_log("clipboard.cleanup.failed", "clipboard unavailable");
+            return;
+        };
+        // Leave different clipboard content copied in the meantime untouched.
+        if clipboard_still_contains_dictation(clipboard.get_text(), &inserted) {
+            match clipboard.clear() {
+                Ok(()) => append_log("clipboard.cleared", "automatic dictation paste"),
+                Err(error) => append_log("clipboard.cleanup.failed", &error.to_string()),
+            }
+        }
+    });
 }
 
 #[tauri::command]
@@ -237,6 +265,22 @@ end tell
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cleanup_only_clears_the_inserted_text() {
+        assert!(clipboard_still_contains_dictation(
+            Ok("Hello. ".into()),
+            "Hello. "
+        ));
+        assert!(!clipboard_still_contains_dictation(
+            Ok("Something else".into()),
+            "Hello. "
+        ));
+        assert!(!clipboard_still_contains_dictation(
+            Err(arboard::Error::ContentNotAvailable),
+            "Hello. "
+        ));
+    }
 
     #[test]
     fn active_target_parser_preserves_monitor_coordinates() {

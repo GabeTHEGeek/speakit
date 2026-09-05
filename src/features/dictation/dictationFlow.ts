@@ -2,6 +2,7 @@ import type { MainView } from "../../ui/mainView";
 import type { ActiveTarget, AppStatus, FocusTarget } from "../../types";
 import { AudioRecorder } from "../../services/audioRecorder";
 import { settings } from "../../services/settings";
+import type { SpeechEngine } from "../../services/settings";
 import { errorDetails, logEvent, native } from "../../platform/native";
 
 export class DictationFlow {
@@ -17,6 +18,8 @@ export class DictationFlow {
     private recorder: AudioRecorder,
     private shortcutValue: () => string,
     private shortcutHeld: () => boolean,
+    private speechEngine: () => SpeechEngine,
+    private onTranscript: (text: string) => void,
   ) {}
 
   get isReady() { return this.status === "ready"; }
@@ -100,15 +103,12 @@ export class DictationFlow {
     }
     let text: string;
     try {
-      logEvent("transcription.requested", `samples=${recording.downsampled.length}`);
-      text = await native.transcribe(recording.downsampled);
+      const engine = this.speechEngine();
+      logEvent("transcription.requested", `engine=${engine} samples=${recording.downsampled.length}`);
+      text = await native.transcribe(recording.downsampled, engine);
       logEvent("transcription.succeeded", `chars=${text.length}`);
-      this.view.transcript.textContent = text || "No speech detected.";
-      this.view.transcript.classList.remove("placeholder");
     } catch (error) {
       logEvent("transcription.failed", errorDetails(error));
-      this.view.transcript.textContent = String(error);
-      this.view.transcript.classList.remove("placeholder");
       this.setStatus("error", `Transcription failed: ${String(error)}`);
       setTimeout(() => this.setStatus("ready", "Focus a text box, then hold the shortcut"), 2500);
       return;
@@ -117,15 +117,21 @@ export class DictationFlow {
       this.setStatus("ready", "No speech detected");
       return;
     }
+    let historySaved = true;
+    try { this.onTranscript(text); }
+    catch (error) {
+      historySaved = false;
+      logEvent("history.save.failed", errorDetails(error));
+    }
     if (!this.focusTarget?.canPaste) {
-      this.setStatus("ready", "Copied — test dictation complete");
+      this.setStatus("ready", historySaved ? "Test dictation saved — use Copy to copy it" : "Dictation complete, but local history could not be saved");
       return;
     }
     try {
       logEvent("paste.requested", `target=${this.focusTarget.appName} pid=${this.targetPid}`);
       const result = await native.pasteText(text, this.focusTarget.appName, this.targetPid);
       logEvent("paste.succeeded", `target=${this.focusTarget.appName} role=${result.focusedRole} subrole=${result.focusedSubrole}`);
-      this.setStatus("ready", "Pasted into your focused text field");
+      this.setStatus("ready", historySaved ? "Pasted into your focused text field" : "Pasted, but local history could not be saved");
     } catch (error) {
       logEvent("paste.failed", errorDetails(error));
       this.setStatus("error", `Copied, but automatic paste failed: ${String(error)}`);

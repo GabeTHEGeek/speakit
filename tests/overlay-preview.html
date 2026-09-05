@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>SpeakIt waveform check</title></head>
+<body class="overlay-check"><div class="preview"><div class="voice-cube" style="opacity:1"><div id="wave" class="waveform" aria-label="Waveform preview"></div><strong>Listening</strong></div></div>
+<script type="module">
+  import "../src/styles.css";
+  const heights = [.36,.58,.42,.72,.48,.86,.62,.4,.55,.34,.28,.47,.78,.92,1,.67,.31,.22,.18,.36,.61,.49,.3,.7,.82,.57,.74,.44,.38,.26,.2,.34,.59];
+  document.querySelector("#wave").innerHTML = heights.map((height) => `<i style="transform:scaleY(${height})"></i>`).join("");
+</script>
+<style>
+  body.overlay-check { min-width:0; min-height:0; height:100vh; display:grid; place-items:center; background:#ece9e1; }
+  .preview { width:258px; height:62px; padding:4px; }
+</style>
+</body></html>

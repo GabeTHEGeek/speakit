@@ -105,14 +105,21 @@ pub(crate) async fn download_model(app: tauri::AppHandle) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub(crate) async fn transcribe(samples: Vec<f32>) -> Result<String, String> {
+pub(crate) async fn transcribe(
+    samples: Vec<f32>,
+    engine: Option<String>,
+) -> Result<String, String> {
     let started = Instant::now();
+    let engine = engine.unwrap_or_else(|| "whisper".into());
     append_log(
         "transcription.native.start",
-        &format!("samples={} threads=4", samples.len()),
+        &format!("engine={engine} samples={} threads=4", samples.len()),
     );
     let result: Result<String, String> =
         tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+            if engine == "canary" {
+                return crate::canary::transcribe_canary(&samples);
+            }
             let context = whisper_context()?;
             let mut state = context.create_state().map_err(|e| e.to_string())?;
             let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
@@ -155,7 +162,7 @@ pub(crate) async fn transcribe(samples: Vec<f32>) -> Result<String, String> {
     result
 }
 
-fn finalize_transcript(text: &str) -> String {
+pub(crate) fn finalize_transcript(text: &str) -> String {
     let mut output = text.trim().to_string();
     if output.is_empty() {
         return output;
@@ -243,5 +250,18 @@ mod tests {
         state
             .full(params, &vec![0.0_f32; 32_000])
             .expect("Whisper should accept 16 kHz mono audio");
+    }
+
+    #[test]
+    #[ignore = "requires the local Whisper model and a 16 kHz WAV fixture"]
+    fn whisper_model_transcribes_fixture() {
+        let audio_path = std::env::var("SPEAKIT_WHISPER_TEST_AUDIO").expect("audio fixture path");
+        let samples = transcribe_rs::audio::read_wav_samples(std::path::Path::new(&audio_path))
+            .expect("audio fixture should load");
+        let started = Instant::now();
+        let text = tauri::async_runtime::block_on(transcribe(samples, Some("whisper".into())))
+            .expect("Whisper should transcribe the fixture");
+        eprintln!("Whisper fixture: {:?} — {text}", started.elapsed());
+        assert!(!text.trim().is_empty());
     }
 }

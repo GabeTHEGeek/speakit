@@ -25,12 +25,17 @@ No account, subscription, cloud transcription, or paid API is required.
 
 ## Features
 
-- Local English transcription with Whisper `small.en`
+- Canary 180M Flash as the default local engine, supporting English, German, French, and Spanish
+- Optional Whisper `small.en` engine for English dictation
 - Fast on-device transcription optimized for Apple Silicon
 - Customizable global push-to-talk shortcut
 - Background operation after the main window is closed
 - Automatic paste into the previously focused application
-- A click-through listening waveform that does not steal focus
+- Automatic cleanup of dictated clipboard text shortly after a successful paste
+- Slide-out navigation with a dedicated local history view for the last five transcriptions
+- Dedicated Speech models page with language, installation, and active-model information
+- A fixed-size app window that cannot be accidentally expanded
+- A click-through, voice-responsive rounded-bar waveform with quiet-room noise filtering
 - Bottom-center overlay placement on the monitor containing the focused app
 - Start and stop sound cues
 - A built-in diagnostics report for microphone, Accessibility, model, installation, and recent events
@@ -40,7 +45,7 @@ No account, subscription, cloud transcription, or paid API is required.
 
 - macOS 13 or newer
 - Apple Silicon Mac for the current packaged build
-- Approximately 466 MB of disk space for the local speech model
+- Approximately 466 MB of disk space for Whisper; Canary Flash optionally adds about 214 MB
 - Microphone permission for recording
 - Accessibility permission for detecting the active app and pasting text
 
@@ -66,9 +71,15 @@ The shortcut can be changed from the SpeakIt window and is saved between launche
 
 Closing the SpeakIt window keeps dictation active in the background. Click the SpeakIt Dock icon to reopen the window, or use **Command-Q** when you want to quit SpeakIt completely.
 
+Open the menu at the top left and choose **History** to see your newest five transcriptions. Use **Copy** to put an entry back on the clipboard or **Delete** to remove it from local history. Older entries are replaced automatically. Audio recordings are not saved.
+
+Canary 180M Flash is the default speech engine. Open the top-left menu and choose **Speech models** to install or switch models and see their supported languages. Transcription timing and the selected engine are recorded in the local diagnostics log.
+
+After automatic paste, SpeakIt clears its dictated text from the clipboard after a short delay. Different content copied in the meantime is left alone. If the paste helper fails, clipboard cleanup is skipped so you can paste manually. Copying an entry manually from history keeps it on the clipboard until you replace it.
+
 ## Privacy
 
-Audio and transcripts remain on the Mac. SpeakIt does not send dictation to a transcription service. The only network download required by the app is the initial open-source Whisper model.
+Audio and transcripts remain on the Mac. SpeakIt does not send dictation to a transcription service. Network access is used only to download the open-source speech model you choose.
 
 The model is stored under:
 
@@ -94,6 +105,11 @@ SpeakIt currently focuses on English voice-to-text dictation for macOS. Google C
 ## Creator
 
 SpeakIt was conceived, produced, and created by **Gabriel Pendleton**.
+
+## Speech model credits
+
+- Whisper `small.en` is provided by the [whisper.cpp model project](https://huggingface.co/ggerganov/whisper.cpp).
+- Canary 180M Flash was created by [NVIDIA](https://huggingface.co/nvidia/canary-180m-flash) and is offered under CC-BY-4.0. SpeakIt uses the [community ONNX conversion](https://huggingface.co/istupakov/canary-180m-flash-onnx) for local experimental inference.
 
 ## License
 

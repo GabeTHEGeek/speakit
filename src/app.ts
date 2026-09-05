@@ -4,21 +4,154 @@ import { errorDetails, logEvent, native } from "./platform/native";
 import { AudioRecorder, requestMicrophoneStream } from "./services/audioRecorder";
 import { GlobalHotkeys, shortcutFromEvent, shortcutLabel } from "./services/globalHotkeys";
 import { settings } from "./services/settings";
+import type { SpeechEngine } from "./services/settings";
 import { renderMainView } from "./ui/mainView";
+import { createHistoryStore } from "./features/history/historyStore";
+import { renderHistory } from "./ui/historyView";
+import { setupNavigation } from "./ui/navigation";
 
 export function startMainApp(iconUrl: string) {
   const view = renderMainView(iconUrl);
+  setupNavigation(view);
   const recorder = new AudioRecorder();
   let shortcut = settings.shortcut;
+  let speechEngine: SpeechEngine = settings.speechEngine;
+  if (!settings.canaryDefaultApplied) {
+    speechEngine = "canary";
+    settings.speechEngine = speechEngine;
+    settings.canaryDefaultApplied = true;
+  }
   let captureShortcut = false;
   let microphoneReady = settings.microphoneReady;
   let accessibilityReady = false;
   let modelIsReady = false;
+  let canaryInstalled = false;
+  let whisperInstalled = false;
 
   let dictation: DictationFlow;
   const hotkeys = new GlobalHotkeys(shortcut, () => void dictation.start(true), () => void dictation.stop());
-  dictation = new DictationFlow(view, recorder, () => shortcut, () => hotkeys.isHeld);
+  const history = createHistoryStore(localStorage);
+  const refreshHistory = () => renderHistory(view.history, history, (message) => {
+    view.statusLabel.textContent = message;
+  });
+  dictation = new DictationFlow(view, recorder, () => shortcut, () => hotkeys.isHeld, () => speechEngine, (text) => {
+    history.add(text);
+    refreshHistory();
+  });
+  refreshHistory();
   dictation.attachManualControls();
+
+  function renderModels() {
+    const canarySelected = speechEngine === "canary";
+    view.canaryCard.classList.toggle("selected", canarySelected);
+    view.whisperCard.classList.toggle("selected", !canarySelected);
+    view.canaryState.textContent = canaryInstalled ? "Installed" : "Not installed";
+    view.whisperState.textContent = whisperInstalled ? "Installed" : "Not installed";
+    view.selectCanary.textContent = canarySelected ? "Selected" : "Use Canary";
+    view.selectWhisper.textContent = canarySelected ? "Use Whisper" : "Selected";
+    view.selectCanary.disabled = canarySelected;
+    view.selectWhisper.disabled = !canarySelected;
+    view.selectCanary.classList.toggle("primary", !canarySelected);
+    view.selectWhisper.classList.toggle("primary", canarySelected);
+    view.downloadCanary.classList.toggle("hidden", canaryInstalled);
+    view.downloadWhisper.classList.toggle("hidden", whisperInstalled);
+    view.downloadCanary.disabled = false;
+    view.downloadWhisper.disabled = false;
+    view.downloadCanary.textContent = "Download · 214 MB";
+    view.downloadWhisper.textContent = "Download · 466 MB";
+  }
+
+  function configureModelSetup(engine: SpeechEngine) {
+    const canary = engine === "canary";
+    view.modelSetupCopy.textContent = canary
+      ? "SpeakIt uses Canary Flash by default. Its free model is about 214 MB and stays entirely on this Mac."
+      : "Whisper small.en is about 466 MB and stays entirely on this Mac.";
+    view.downloadProgress.style.width = "0";
+    view.downloadLabel.textContent = "Ready to download";
+    view.downloadModelButton.textContent = `Download ${canary ? "Canary Flash" : "Whisper"}`;
+    view.downloadModelButton.disabled = false;
+    view.modelSetup.classList.remove("hidden");
+  }
+
+  async function selectEngine(next: SpeechEngine) {
+    if (!dictation.isReady) return;
+    speechEngine = next;
+    settings.speechEngine = next;
+    modelIsReady = next === "canary" ? canaryInstalled : whisperInstalled;
+    dictation.setModelReady(modelIsReady);
+    renderModels();
+    if (!modelIsReady) {
+      configureModelSetup(next);
+      dictation.setStatus("error", `Download ${next === "canary" ? "Canary Flash" : "Whisper"} before dictating`);
+      window.setTimeout(() => dictation.setStatus("ready", "Focus a text box, then hold the shortcut"), 2200);
+      return;
+    }
+    view.modelSetup.classList.add("hidden");
+    view.modelState.textContent = `Preparing ${next === "canary" ? "Canary Flash" : "Whisper small.en"}…`;
+    try {
+      if (next === "canary") await native.prepareCanaryModel();
+      else await native.prepareModel();
+      if (!hotkeys.isRegistered) await hotkeys.bind(shortcut);
+      view.modelState.textContent = `${next === "canary" ? "Canary Flash (experimental)" : "Whisper small.en"} ready`;
+      dictation.setStatus("ready", `${next === "canary" ? "Canary Flash" : "Whisper"} selected`);
+    } catch (error) {
+      modelIsReady = false;
+      dictation.setModelReady(false);
+      dictation.setStatus("error", `Could not prepare ${next}: ${String(error)}`);
+    }
+  }
+
+  view.selectCanary.addEventListener("click", () => void selectEngine("canary"));
+  view.selectWhisper.addEventListener("click", () => void selectEngine("whisper"));
+  void listen<number>("canary-download-progress", (event) => {
+    const percent = Math.round(Math.max(0, Math.min(100, event.payload)));
+    view.downloadProgress.style.width = `${percent}%`;
+    view.downloadLabel.textContent = `Downloading… ${percent}%`;
+    view.downloadCanary.textContent = `Downloading… ${percent}%`;
+  });
+
+  async function installEngine(engine: SpeechEngine) {
+    speechEngine = engine;
+    settings.speechEngine = engine;
+    renderModels();
+    const action = engine === "canary" ? view.downloadCanary : view.downloadWhisper;
+    action.disabled = true;
+    action.textContent = "Starting…";
+    view.downloadModelButton.disabled = true;
+    view.downloadModelButton.textContent = "Downloading…";
+    try {
+      if (engine === "canary") await native.downloadCanaryModel();
+      else await native.downloadModel();
+      action.textContent = "Preparing…";
+      view.downloadLabel.textContent = "Preparing speech model…";
+      if (engine === "canary") {
+        await native.prepareCanaryModel();
+        canaryInstalled = true;
+      } else {
+        await native.prepareModel();
+        whisperInstalled = true;
+      }
+      modelIsReady = true;
+      dictation.setModelReady(true);
+      if (!hotkeys.isRegistered) await hotkeys.bind(shortcut);
+      renderModels();
+      view.downloadProgress.style.width = "100%";
+      view.downloadLabel.textContent = "Download complete";
+      view.modelState.textContent = `${engine === "canary" ? "Canary Flash" : "Whisper small.en"} ready`;
+      dictation.setStatus("ready", `${engine === "canary" ? "Canary Flash" : "Whisper"} is ready`);
+      window.setTimeout(() => view.modelSetup.classList.add("hidden"), 450);
+    } catch (error) {
+      action.disabled = false;
+      action.textContent = "Try again";
+      view.downloadModelButton.disabled = false;
+      view.downloadModelButton.textContent = "Try download again";
+      view.downloadLabel.textContent = `Download failed: ${String(error)}`;
+      dictation.setStatus("error", `Model setup failed: ${String(error)}`);
+    }
+  }
+
+  view.downloadCanary.addEventListener("click", () => void installEngine("canary"));
+  view.downloadWhisper.addEventListener("click", () => void installEngine("whisper"));
 
   function renderShortcut() {
     const parts = shortcutLabel(shortcut).split(" ");
@@ -87,10 +220,6 @@ export function startMainApp(iconUrl: string) {
     }
   }, true);
 
-  view.copyButton.addEventListener("click", async () => {
-    if (!view.transcript.classList.contains("placeholder")) await navigator.clipboard.writeText(view.transcript.textContent || "");
-  });
-
   view.enableMic.addEventListener("click", async () => {
     try {
       view.enableMic.disabled = true;
@@ -125,31 +254,9 @@ export function startMainApp(iconUrl: string) {
     const percent = Math.max(0, Math.min(100, event.payload));
     view.downloadProgress.style.width = `${percent}%`;
     view.downloadLabel.textContent = `Downloading… ${Math.round(percent)}%`;
+    view.downloadWhisper.textContent = `Downloading… ${Math.round(percent)}%`;
   });
-  view.downloadModelButton.addEventListener("click", async () => {
-    view.downloadModelButton.disabled = true;
-    view.downloadModelButton.textContent = "Downloading…";
-    view.downloadLabel.textContent = "Starting download…";
-    view.modelState.textContent = "Downloading Whisper small.en…";
-    try {
-      await native.downloadModel();
-      modelIsReady = true;
-      dictation.setModelReady(true);
-      view.downloadProgress.style.width = "100%";
-      view.downloadLabel.textContent = "Preparing speech model…";
-      view.modelState.textContent = "Preparing Whisper small.en…";
-      await native.prepareModel();
-      view.downloadLabel.textContent = "Download complete";
-      view.modelState.textContent = "Whisper small.en ready";
-      if (!hotkeys.isRegistered) await hotkeys.bind(shortcut);
-      window.setTimeout(() => view.modelSetup.classList.add("hidden"), 450);
-    } catch (error) {
-      view.downloadLabel.textContent = `Download failed: ${String(error)}`;
-      view.downloadModelButton.disabled = false;
-      view.downloadModelButton.textContent = "Try download again";
-      view.modelState.textContent = "Speech model required";
-    }
-  });
+  view.downloadModelButton.addEventListener("click", () => void installEngine(speechEngine));
 
   async function refreshAccessibility() {
     accessibilityReady = await native.accessibilityReady().catch(() => false);
@@ -174,14 +281,14 @@ export function startMainApp(iconUrl: string) {
       micResult = `FAILED — ${errorDetails(error)}`;
       logEvent("diagnostics.microphone.failed", errorDetails(error));
     }
-    const report = await native.diagnostics();
+    const report = await native.diagnostics(speechEngine);
     view.diagnosticOutput.textContent = [
       `SpeakIt ${report.version}`,
       `Microphone: ${micResult}`,
       `Microphone device: ${micLabel}`,
       `Microphone peak: ${micPeak.toFixed(5)}`,
       `Accessibility: ${report.accessibilityReady ? "PASS" : "FAILED"}`,
-      `Speech model: ${report.modelReady ? `PASS (${report.modelSizeMb.toFixed(1)} MB)` : "FAILED"}`,
+      `Speech model: ${speechEngine === "canary" ? "Canary Flash" : "Whisper small.en"} — ${report.modelReady ? `PASS (${report.modelSizeMb.toFixed(1)} MB)` : "FAILED"}`,
       `Installation: ${report.installLocation}`,
       `Executable: ${report.executablePath}`,
       `Log: ${report.logPath}`,
@@ -200,12 +307,14 @@ export function startMainApp(iconUrl: string) {
   async function initialize() {
     logEvent("app.initialize", `userAgent=${navigator.userAgent}`);
     renderShortcut();
+    renderModels();
     updatePermissionSetup();
     await refreshAccessibility();
     if (!accessibilityReady) void native.requestAccessibilityPermission();
     try {
       const stream = await requestMicrophoneStream();
       stream.getTracks().forEach((track) => { track.enabled = false; });
+      recorder.setPreparedStream(stream);
       microphoneReady = true;
       settings.microphoneReady = true;
       logEvent("permission.microphone.startup.granted", stream.getAudioTracks()[0]?.label || "audio track");
@@ -225,16 +334,20 @@ export function startMainApp(iconUrl: string) {
 
     try {
       view.modelState.textContent = "Checking speech model…";
-      modelIsReady = await native.modelReady();
+      whisperInstalled = await native.modelReady();
+      canaryInstalled = await native.canaryReady().catch(() => false);
+      modelIsReady = speechEngine === "canary" ? canaryInstalled : whisperInstalled;
       dictation.setModelReady(modelIsReady);
+      renderModels();
       if (modelIsReady) {
         view.modelSetup.classList.add("hidden");
-        view.modelState.textContent = "Preparing Whisper small.en…";
-        await native.prepareModel();
-        view.modelState.textContent = "Whisper small.en ready";
+        view.modelState.textContent = `Preparing ${speechEngine === "canary" ? "Canary Flash" : "Whisper small.en"}…`;
+        if (speechEngine === "canary") await native.prepareCanaryModel();
+        else await native.prepareModel();
+        view.modelState.textContent = `${speechEngine === "canary" ? "Canary Flash (experimental)" : "Whisper small.en"} ready`;
         await hotkeys.bind(shortcut);
       } else {
-        view.modelSetup.classList.remove("hidden");
+        configureModelSetup(speechEngine);
         view.modelState.textContent = "Speech model required";
       }
     } catch (error) {

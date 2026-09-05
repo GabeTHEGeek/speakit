@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use crate::{
+    canary,
     logging::log_path,
     permissions::{accessibility_ready, app_install_location},
     speech::model_path,
@@ -20,9 +21,14 @@ pub(crate) struct DiagnosticReport {
 }
 
 #[tauri::command]
-pub(crate) fn diagnostics() -> DiagnosticReport {
+pub(crate) fn diagnostics(engine: Option<String>) -> DiagnosticReport {
     let model = model_path().unwrap_or_default();
-    let model_size = std::fs::metadata(&model).map(|m| m.len()).unwrap_or(0);
+    let canary_selected = engine.as_deref() == Some("canary");
+    let model_size = if canary_selected {
+        canary::model_size_bytes()
+    } else {
+        std::fs::metadata(&model).map(|m| m.len()).unwrap_or(0)
+    };
     let log = log_path().unwrap_or_default();
     let contents = std::fs::read_to_string(&log).unwrap_or_default();
     let mut lines: Vec<&str> = contents.lines().rev().take(80).collect();
@@ -30,7 +36,11 @@ pub(crate) fn diagnostics() -> DiagnosticReport {
     DiagnosticReport {
         version: env!("CARGO_PKG_VERSION").into(),
         accessibility_ready: accessibility_ready(),
-        model_ready: model.is_file(),
+        model_ready: if canary_selected {
+            canary::canary_ready().unwrap_or(false)
+        } else {
+            model.is_file()
+        },
         model_size_mb: model_size as f64 / 1_048_576.0,
         install_location: app_install_location(),
         executable_path: std::env::current_exe()
