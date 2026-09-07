@@ -11,6 +11,7 @@ export class DictationFlow {
   private targetPid = 0;
   private modelReady = false;
   private manualButtonHeld = false;
+  private startCanceled = false;
   private lastOverlayAnchor = settings.overlayAnchor;
 
   constructor(
@@ -51,6 +52,7 @@ export class DictationFlow {
       this.setStatus("error", "Download the speech model before dictating");
       return;
     }
+    this.startCanceled = false;
     this.setStatus("starting", "Starting microphone…");
     try {
       void native.playActivationSound().catch((error) => logEvent("sound.start.failed", errorDetails(error)));
@@ -68,6 +70,12 @@ export class DictationFlow {
         await native.eraseTriggerSpace();
       }
       const sampleRate = await this.recorder.start();
+      if (this.startCanceled || (requireTextField && !this.shortcutHeld()) || (!requireTextField && !this.manualButtonHeld)) {
+        await this.recorder.stop();
+        await native.hideOverlay().catch(() => undefined);
+        this.setStatus("ready", "Focus a text box, then hold the shortcut");
+        return;
+      }
       const target = await targetPromise;
       await earlyOverlayPromise;
       await native.showOverlay(target.anchorX, target.anchorY);
@@ -82,14 +90,30 @@ export class DictationFlow {
       if (requireTextField && !this.shortcutHeld()) await this.stop();
       if (!requireTextField && !this.manualButtonHeld) await this.stop();
     } catch (error) {
+      if (this.startCanceled || String(error).includes("Recording start canceled")) {
+        logEvent("recording.start.canceled");
+        await native.hideOverlay().catch(() => undefined);
+        this.setStatus("ready", "Focus a text box, then hold the shortcut");
+        return;
+      }
       logEvent("recording.start.failed", errorDetails(error));
       await native.hideOverlay().catch(() => undefined);
-      this.setStatus("error", String(error).includes("Accessibility") ? "Enable Accessibility access for SpeakIt" : "Microphone access is needed");
-      setTimeout(() => this.setStatus("ready", "Focus a text box, then hold the shortcut"), 2800);
+      const message = String(error).includes("did not respond")
+        ? "Microphone is busy — try again after the call app releases it"
+        : String(error).includes("Accessibility") ? "Enable Accessibility access for SpeakIt" : "Microphone access is needed";
+      this.setStatus("error", message);
+      setTimeout(() => this.setStatus("ready", "Focus a text box, then hold the shortcut"), 1200);
     }
   }
 
   async stop() {
+    if (this.status === "starting") {
+      this.startCanceled = true;
+      this.recorder.cancelPendingStart();
+      this.setStatus("starting", "Canceling microphone start…");
+      await native.hideOverlay().catch(() => undefined);
+      return;
+    }
     if (this.status !== "recording") return;
     this.setStatus("transcribing", "Turning speech into text…");
     void native.playStopSound().catch((error) => logEvent("sound.stop.failed", errorDetails(error)));

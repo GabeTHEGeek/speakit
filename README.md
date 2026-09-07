@@ -38,6 +38,7 @@ No account, subscription, cloud transcription, or paid API is required.
 - A click-through, voice-responsive rounded-bar waveform with quiet-room noise filtering
 - Bottom-center overlay placement on the monitor containing the focused app
 - Start and stop sound cues
+- Automatic recovery when another call app temporarily stalls microphone access
 - A built-in diagnostics report for microphone, Accessibility, model, installation, and recent events
 - One separator space after each dictation so consecutive sentences do not run together
 
@@ -95,6 +96,8 @@ SpeakIt needs two macOS permissions:
 - **Accessibility:** identifies the active application, restores it after transcription, and performs the paste command.
 
 If automatic paste stops working, open **System Settings → Privacy & Security → Accessibility**, verify that the installed SpeakIt application is enabled, then restart SpeakIt.
+
+If a call app such as Google Meet is opening, closing, or switching microphones, SpeakIt now cancels a stalled recording start automatically instead of remaining frozen. Release the shortcut, wait for the call app to finish changing devices, and try again.
 
 Use **Run check** in SpeakIt's System diagnostics section to verify the microphone signal, Accessibility status, model installation, app location, and recent event timing. The report can be copied when filing an issue.
 

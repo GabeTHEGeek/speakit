@@ -1,6 +1,7 @@
 import { emitTo } from "@tauri-apps/api/event";
 import { logEvent } from "../platform/native";
 import { AdaptiveAudioLevel } from "./audioLevel";
+import { withTimeout } from "./promiseTimeout";
 
 export const microphoneConstraints: MediaTrackConstraints = {
   channelCount: 1,
@@ -22,25 +23,50 @@ export class AudioRecorder {
   private samples: Float32Array[] = [];
   private lastLevelUpdate = 0;
   private levelMeter = new AdaptiveAudioLevel();
+  private startAttempt = 0;
 
   async prepare() {
-    if (!this.preparedStream || !this.preparedStream.active) {
-      this.preparedStream = await requestMicrophoneStream();
+    const hasLiveTrack = this.preparedStream?.getAudioTracks()
+      .some((track) => track.readyState === "live") ?? false;
+    if (!this.preparedStream?.active || !hasLiveTrack) {
+      const started = performance.now();
+      logEvent("microphone.acquire.started", "timeout_ms=3000");
+      this.preparedStream = await withTimeout(
+        requestMicrophoneStream(),
+        3_000,
+        "The microphone did not respond. Another call or app may be using it.",
+        (lateStream) => lateStream.getTracks().forEach((track) => track.stop()),
+      );
+      logEvent("microphone.acquire.complete", `elapsed_ms=${Math.round(performance.now() - started)}`);
       logEvent("microphone.acquired", "raw mono; voice processing disabled");
+      this.watchPreparedStream(this.preparedStream);
     }
     return this.preparedStream;
   }
 
   setPreparedStream(stream: MediaStream) {
     this.preparedStream = stream;
+    this.watchPreparedStream(stream);
   }
 
   async start() {
+    const attempt = ++this.startAttempt;
     const stream = await this.prepare();
+    if (attempt !== this.startAttempt) {
+      stream.getTracks().forEach((track) => { track.enabled = false; });
+      throw new Error("Recording start canceled");
+    }
     stream.getTracks().forEach((track) => { track.enabled = true; });
     this.mediaStream = stream;
     this.audioContext = new AudioContext();
     if (this.audioContext.state === "suspended") await this.audioContext.resume();
+    if (attempt !== this.startAttempt) {
+      stream.getTracks().forEach((track) => { track.enabled = false; });
+      await this.audioContext.close();
+      this.audioContext = null;
+      this.mediaStream = null;
+      throw new Error("Recording start canceled");
+    }
     this.source = this.audioContext.createMediaStreamSource(stream);
     this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
     this.samples = [];
@@ -61,6 +87,10 @@ export class AudioRecorder {
     this.source.connect(this.processor);
     this.processor.connect(this.audioContext.destination);
     return this.audioContext.sampleRate;
+  }
+
+  cancelPendingStart() {
+    this.startAttempt += 1;
   }
 
   async stop() {
@@ -108,7 +138,18 @@ export class AudioRecorder {
   }
 
   dispose() {
+    this.startAttempt += 1;
     this.preparedStream?.getTracks().forEach((track) => track.stop());
+    this.preparedStream = null;
+  }
+
+  private watchPreparedStream(stream: MediaStream) {
+    stream.getAudioTracks().forEach((track) => {
+      track.addEventListener("ended", () => {
+        logEvent("microphone.track.ended", `label=${track.label || "audio track"}`);
+        if (this.preparedStream === stream) this.preparedStream = null;
+      }, { once: true });
+    });
   }
 }
 

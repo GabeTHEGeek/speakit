@@ -1,7 +1,10 @@
 use serde::Serialize;
 use std::process::Command;
+use std::time::{Duration, Instant};
 
-use crate::{logging::append_log, permissions::accessibility_ready};
+use crate::{logging::append_log, permissions::accessibility_ready, process::output_with_timeout};
+
+const SYSTEM_HELPER_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +40,7 @@ pub(crate) fn paste_text(
         return Err("SpeakIt could not identify the app that had focus".into());
     }
     let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+    let previous_clipboard_text = clipboard.get_text().ok();
     let inserted = text_for_paste(&text);
     clipboard
         .set_text(inserted.clone())
@@ -49,9 +53,16 @@ on run argv
     set targetProcess to first application process whose unix id is targetPid
     set frontmost of targetProcess to true
   end tell
-  delay 0.06
+  repeat 20 times
+    tell application "System Events"
+      if frontmost of targetProcess is true then exit repeat
+    end tell
+    delay 0.025
+  end repeat
+  delay 0.10
   tell application "System Events"
     set targetProcess to first application process whose unix id is targetPid
+    key code 9 using {command down}
     set focusedRole to "unknown"
     set focusedSubrole to ""
     try
@@ -61,20 +72,21 @@ on run argv
         set focusedSubrole to value of attribute "AXSubrole" of focusedElement
       end try
     end try
-    keystroke "v" using {command down}
   end tell
   return focusedRole & "||" & focusedSubrole
 end run
 "#;
     let pid = target_pid.to_string();
-    let output = Command::new("osascript")
-        .args(["-e", paste_script, "--", &pid])
-        .output()
-        .map_err(|e| {
-            let message = format!("Could not run the paste helper: {e}");
-            append_log("paste.failed", &message);
-            message
-        })?;
+    let helper_started = Instant::now();
+    let output = output_with_timeout(
+        Command::new("osascript").args(["-e", paste_script, "--", &pid]),
+        SYSTEM_HELPER_TIMEOUT,
+    )
+    .map_err(|e| {
+        let message = format!("Could not run the paste helper: {e}");
+        append_log("paste.failed", &message);
+        message
+    })?;
     if !output.status.success() {
         let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
         append_log(
@@ -93,9 +105,12 @@ end run
     let focused_subrole = parts.next().unwrap_or_default().to_string();
     append_log(
         "paste.complete",
-        &format!("app={app_name} pid={target_pid} role={focused_role} subrole={focused_subrole}"),
+        &format!(
+            "app={app_name} pid={target_pid} role={focused_role} subrole={focused_subrole} helper_ms={}",
+            helper_started.elapsed().as_millis()
+        ),
     );
-    clear_pasted_text_later(inserted);
+    restore_clipboard_later(inserted, previous_clipboard_text);
     Ok(PasteResult {
         focused_role,
         focused_subrole,
@@ -109,7 +124,7 @@ fn clipboard_still_contains_dictation(
     current.is_ok_and(|text| text == inserted)
 }
 
-fn clear_pasted_text_later(inserted: String) {
+fn restore_clipboard_later(inserted: String, previous_text: Option<String>) {
     std::thread::spawn(move || {
         // Give the target time to consume asynchronous Command-V without
         // delaying the UI or the next recording. Failed pastes retain the text.
@@ -120,8 +135,12 @@ fn clear_pasted_text_later(inserted: String) {
         };
         // Leave different clipboard content copied in the meantime untouched.
         if clipboard_still_contains_dictation(clipboard.get_text(), &inserted) {
-            match clipboard.clear() {
-                Ok(()) => append_log("clipboard.cleared", "automatic dictation paste"),
+            let result = match previous_text {
+                Some(text) => clipboard.set_text(text),
+                None => clipboard.clear(),
+            };
+            match result {
+                Ok(()) => append_log("clipboard.restored", "content from before dictation paste"),
                 Err(error) => append_log("clipboard.cleanup.failed", &error.to_string()),
             }
         }
@@ -130,10 +149,10 @@ fn clear_pasted_text_later(inserted: String) {
 
 #[tauri::command]
 pub(crate) fn frontmost_app() -> Result<String, String> {
-    let output = Command::new("osascript")
-        .args(["-e", "tell application \"System Events\" to get name of first application process whose frontmost is true"])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = output_with_timeout(
+        Command::new("osascript").args(["-e", "tell application \"System Events\" to get name of first application process whose frontmost is true"]),
+        SYSTEM_HELPER_TIMEOUT,
+    )?;
     if !output.status.success() {
         return Err("Could not identify the active application".into());
     }
@@ -175,10 +194,11 @@ tell application "System Events"
   return (unix id of frontProcess as string) & "||" & (name of frontProcess) & "||" & (anchorX as string) & "||" & (anchorY as string)
 end tell
 "#;
-    let output = Command::new("osascript")
-        .args(["-e", script])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let started = Instant::now();
+    let output = output_with_timeout(
+        Command::new("osascript").args(["-e", script]),
+        SYSTEM_HELPER_TIMEOUT,
+    )?;
     if !output.status.success() {
         return Err("Could not identify the active application".into());
     }
@@ -188,8 +208,12 @@ end tell
         "target.captured",
         &format!(
             "app={} pid={} anchor_x={:.1} anchor_y={:.1}",
-            target.app_name, target.pid, target.anchor_x, target.anchor_y
+            target.app_name, target.pid, target.anchor_x, target.anchor_y,
         ),
+    );
+    append_log(
+        "target.capture.timing",
+        &format!("helper_ms={}", started.elapsed().as_millis()),
     );
     Ok(target)
 }
@@ -204,10 +228,10 @@ on run
   end tell
 end run
 "#;
-    let output = Command::new("osascript")
-        .args(["-e", script])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = output_with_timeout(
+        Command::new("osascript").args(["-e", script]),
+        SYSTEM_HELPER_TIMEOUT,
+    )?;
     if output.status.success() {
         Ok(())
     } else {
@@ -242,10 +266,10 @@ tell application "System Events"
   end try
 end tell
 "#;
-    let output = Command::new("osascript")
-        .args(["-e", script])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = output_with_timeout(
+        Command::new("osascript").args(["-e", script]),
+        SYSTEM_HELPER_TIMEOUT,
+    )?;
     if !output.status.success() {
         return Err("Accessibility permission is required to detect the focused text box".into());
     }
@@ -267,7 +291,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn cleanup_only_clears_the_inserted_text() {
+    fn restoration_only_replaces_the_inserted_text() {
         assert!(clipboard_still_contains_dictation(
             Ok("Hello. ".into()),
             "Hello. "

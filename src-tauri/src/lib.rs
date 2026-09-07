@@ -5,6 +5,7 @@ mod insertion;
 mod logging;
 mod overlay;
 mod permissions;
+mod process;
 mod speech;
 
 use canary::{canary_ready, download_canary_model, prepare_canary_model};
