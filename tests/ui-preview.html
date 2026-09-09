@@ -16,18 +16,38 @@
   if (mode !== "model") view.modelSetup.classList.add("hidden");
   view.modelState.textContent = "Whisper small.en ready";
   view.shortcutDisplay.innerHTML = "<kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd><span>Hold anywhere</span>";
-  const store = createHistoryStore({ getItem: () => null, setItem() {} });
+  const saved = new Map();
+  const store = createHistoryStore({ getItem: (key) => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) });
   if (mode !== "empty") {
     for (let index = 1; index <= 5; index++) store.add(`Example dictation ${index}. A local transcription that can be copied or deleted.`);
   }
-  renderHistory(view.history, store, console.error);
+  const refreshHistory = () => {
+    renderHistory(view.recentHistory, store, console.error, refreshHistory, 1);
+    renderHistory(view.history, store, console.error, refreshHistory);
+  };
+  refreshHistory();
   if (mode === "history") view.navHistory.click();
   if (mode === "models") view.navModels.click();
   if (mode === "delete") {
     view.history.querySelector('[aria-label^="Delete"]').click();
-    if (store.list().length !== 4 || view.history.children.length !== 4) throw new Error("Delete failed");
+    if (store.list().length !== 4 || view.history.children.length !== 4 || view.recentHistory.children.length !== 1) throw new Error("Delete failed");
   }
   await new Promise((resolve) => requestAnimationFrame(resolve));
+  const home = view.homeView.getBoundingClientRect();
+  const diagnostics = document.querySelector(".diagnostics-card").getBoundingClientRect();
+  const capturesCard = document.querySelector(".recent-captures-card").getBoundingClientRect();
+  const capturesList = view.recentHistory.getBoundingClientRect();
+  document.body.dataset.recentBelowDiagnostics = String(capturesCard.top >= diagnostics.bottom);
+  document.body.dataset.homeFitsViewport = String(
+    document.documentElement.scrollHeight <= window.innerHeight + 1 &&
+    view.homeView.scrollHeight <= view.homeView.clientHeight + 1,
+  );
+  document.body.dataset.capturesFitCard = String(
+    capturesCard.top >= home.top && capturesCard.bottom <= home.bottom + 1 &&
+    capturesList.left >= capturesCard.left && capturesList.right <= capturesCard.right &&
+    capturesList.bottom <= capturesCard.bottom,
+  );
   document.body.dataset.horizontalOverflow = String(document.documentElement.scrollWidth > innerWidth);
   document.body.dataset.historyCount = String(store.list().length);
+  document.body.dataset.recentVisibleCount = String(view.recentHistory.children.length);
 </script></body></html>

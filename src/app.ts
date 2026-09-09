@@ -12,7 +12,6 @@ import { setupNavigation } from "./ui/navigation";
 
 export function startMainApp(iconUrl: string) {
   const view = renderMainView(iconUrl);
-  setupNavigation(view);
   const recorder = new AudioRecorder();
   let shortcut = settings.shortcut;
   let speechEngine: SpeechEngine = settings.speechEngine;
@@ -31,9 +30,12 @@ export function startMainApp(iconUrl: string) {
   let dictation: DictationFlow;
   const hotkeys = new GlobalHotkeys(shortcut, () => void dictation.start(true), () => void dictation.stop());
   const history = createHistoryStore(localStorage);
-  const refreshHistory = () => renderHistory(view.history, history, (message) => {
-    view.statusLabel.textContent = message;
-  });
+  const showHistoryError = (message: string) => { view.statusLabel.textContent = message; };
+  const refreshHistory = () => {
+    renderHistory(view.recentHistory, history, showHistoryError, refreshHistory, 1);
+    renderHistory(view.history, history, showHistoryError, refreshHistory);
+  };
+  setupNavigation(view, refreshHistory);
   dictation = new DictationFlow(view, recorder, () => shortcut, () => hotkeys.isHeld, () => speechEngine, (text) => {
     history.add(text);
     refreshHistory();

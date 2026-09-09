@@ -218,27 +218,6 @@ end tell
     Ok(target)
 }
 
-#[tauri::command]
-pub(crate) fn erase_trigger_space() -> Result<(), String> {
-    let script = r#"
-on run
-  tell application "System Events"
-    delay 0.08
-    key code 51
-  end tell
-end run
-"#;
-    let output = output_with_timeout(
-        Command::new("osascript").args(["-e", script]),
-        SYSTEM_HELPER_TIMEOUT,
-    )?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err("SpeakIt needs Accessibility permission to handle this shortcut".into())
-    }
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FocusTarget {

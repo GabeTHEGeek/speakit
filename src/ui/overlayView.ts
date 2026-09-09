@@ -47,7 +47,7 @@ export function renderOverlay(currentWindow: Window) {
       const slow = Math.abs(Math.sin(now * 0.68 + index * 1.37));
       const quick = Math.abs(Math.sin(now * 1.43 - index * 0.83));
       const shape = 0.18 + slow * 0.5 + quick * 0.32;
-      bar.style.transform = `scaleY(${Math.min(1, 0.16 + level * shape * 1.3)})`;
+      bar.style.transform = `scaleY(${Math.min(1, 0.16 + level * shape * 1.55)})`;
     });
     animationFrame = requestAnimationFrame(animate);
   }

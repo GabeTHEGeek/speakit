@@ -10,6 +10,7 @@
   <img src="https://img.shields.io/badge/macOS-13%2B-1f2421?style=flat-square&logo=apple&logoColor=white" alt="macOS 13 or newer">
   <img src="https://img.shields.io/badge/transcription-100%25%20local-ef603f?style=flat-square" alt="100 percent local transcription">
   <img src="https://img.shields.io/badge/cost-free-4a9c68?style=flat-square" alt="Free to use">
+  <img src="https://img.shields.io/badge/release-0.2.44-fb6542?style=flat-square" alt="SpeakIt release 0.2.44">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-4468a6?style=flat-square" alt="GNU General Public License v3.0"></a>
 </p>
 
@@ -28,6 +29,8 @@ No account, subscription, cloud transcription, or paid API is required.
 - Canary 180M Flash as the default local engine, supporting English, German, French, and Spanish
 - Optional Whisper `small.en` engine for English dictation
 - Fast on-device transcription optimized for Apple Silicon
+- Conversational punctuation that breaks up common run-on dictation, recognizes likely questions, and preserves punctuation supplied by the speech model
+- Spoken punctuation commands including “comma,” “period,” “question mark,” “new line,” and “new paragraph”
 - Customizable global push-to-talk shortcut
 - Background operation after the main window is closed
 - Automatic paste into the previously focused application
@@ -39,6 +42,8 @@ No account, subscription, cloud transcription, or paid API is required.
 - Bottom-center overlay placement on the monitor containing the focused app
 - Start and stop sound cues
 - Automatic recovery when another call app temporarily stalls microphone access
+- Automatic replacement of stale or muted microphone tracks after switching between SpeakIt and a call app
+- Rapid-repeat dictation: begin the next recording while the previous result finishes processing
 - A built-in diagnostics report for microphone, Accessibility, model, installation, and recent events
 - One separator space after each dictation so consecutive sentences do not run together
 
@@ -67,6 +72,10 @@ Run SpeakIt from Applications rather than directly from the mounted installer. m
 3. Begin speaking after the start sound and listening waveform appear.
 4. Release the shortcut when finished.
 5. SpeakIt transcribes locally, restores the original app, and pastes the text.
+
+Speak naturally and SpeakIt will conservatively format clear conversational transitions and questions. For exact control, say **“comma,” “period,” “question mark,” “new line,”** or **“new paragraph.”**
+
+You do not have to wait for the previous transcription to finish before starting another recording. SpeakIt processes completed recordings in order and remembers the target application for each one.
 
 The shortcut can be changed from the SpeakIt window and is saved between launches. The listening overlay appears on the monitor containing the focused application window and remains there for that recording.
 
@@ -97,7 +106,7 @@ SpeakIt needs two macOS permissions:
 
 If automatic paste stops working, open **System Settings → Privacy & Security → Accessibility**, verify that the installed SpeakIt application is enabled, then restart SpeakIt.
 
-If a call app such as Google Meet is opening, closing, or switching microphones, SpeakIt now cancels a stalled recording start automatically instead of remaining frozen. Release the shortcut, wait for the call app to finish changing devices, and try again.
+If a call app such as Google Meet is opening, closing, or switching microphones, SpeakIt cancels a stalled recording start instead of remaining frozen. It also detects a stale or muted warmed-up microphone track and requests a fresh one on the next attempt. Release the shortcut, let the call app finish changing devices, and try again.
 
 Use **Run check** in SpeakIt's System diagnostics section to verify the microphone signal, Accessibility status, model installation, app location, and recent event timing. The report can be copied when filing an issue.
 

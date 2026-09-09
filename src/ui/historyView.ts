@@ -1,12 +1,20 @@
 import type { HistoryStore } from "../features/history/historyStore";
 
-export function renderHistory(container: HTMLElement, store: HistoryStore, onError: (message: string) => void) {
+export function renderHistory(
+  container: HTMLElement,
+  store: HistoryStore,
+  onError: (message: string) => void,
+  onChanged?: () => void,
+  limit?: number,
+) {
   container.replaceChildren();
-  const entries = store.list();
+  const entries = store.list().slice(0, limit);
   if (!entries.length) {
     const empty = document.createElement("li");
     empty.className = "history-empty";
-    empty.textContent = "Your last five transcriptions will appear here. Audio is not saved.";
+    empty.textContent = limit === 1
+      ? "Your latest transcription will appear here. Audio is not saved."
+      : "Your last five transcriptions will appear here. Audio is not saved.";
     container.append(empty);
     return;
   }
@@ -36,7 +44,8 @@ export function renderHistory(container: HTMLElement, store: HistoryStore, onErr
     remove.addEventListener("click", () => {
       try {
         store.remove(entry.id);
-        renderHistory(container, store, onError);
+        if (onChanged) onChanged();
+        else renderHistory(container, store, onError);
       } catch { onError("Could not delete this entry from local storage. Please try again."); }
     });
     const text = document.createElement("p");

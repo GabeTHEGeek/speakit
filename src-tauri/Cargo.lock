@@ -3761,12 +3761,13 @@ dependencies = [
 
 [[package]]
 name = "speakit"
-version = "0.2.29"
+version = "0.2.44"
 dependencies = [
  "arboard",
  "core-foundation",
  "dirs",
  "futures-util",
+ "objc2",
  "reqwest 0.12.28",
  "serde",
  "tauri",

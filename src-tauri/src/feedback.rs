@@ -36,10 +36,10 @@ fn play_feedback_sound(
 
 #[tauri::command]
 pub(crate) fn play_activation_sound() -> Result<(), String> {
-    play_feedback_sound("start", "/System/Library/Sounds/Ping.aiff", "0.62", "0.55")
+    play_feedback_sound("start", "/System/Library/Sounds/Ping.aiff", "0.90", "0.55")
 }
 
 #[tauri::command]
 pub(crate) fn play_stop_sound() -> Result<(), String> {
-    play_feedback_sound("stop", "/System/Library/Sounds/Pop.aiff", "0.58", "0.40")
+    play_feedback_sound("stop", "/System/Library/Sounds/Pop.aiff", "0.85", "0.40")
 }

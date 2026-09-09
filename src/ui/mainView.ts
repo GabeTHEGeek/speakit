@@ -41,10 +41,17 @@ export function renderMainView(iconUrl: string) {
           <div class="diagnostic-actions"><button id="run-diagnostics" type="button">Run check</button><button id="copy-diagnostics" type="button">Copy</button></div>
           <pre id="diagnostic-output" class="hidden"></pre>
         </section>
+        <section class="result-card recent-captures-card" aria-labelledby="recent-captures-title">
+          <div class="result-heading">
+            <span id="recent-captures-title">Recent captures</span>
+            <button id="view-all-history" type="button">View all</button>
+          </div>
+          <ul id="recent-history" class="history-list compact-history" aria-label="Recent captures"></ul>
+        </section>
       </div>
       <section id="history-view" class="history-page hidden">
-        <div class="history-page-title"><div><div class="eyebrow">LOCAL HISTORY</div><h2>Recent dictations</h2></div><span>Last 5 · Audio is never saved</span></div>
-        <div class="result-card"><ul id="history" aria-label="Recent dictations"></ul></div>
+        <div class="history-page-title"><div><div class="eyebrow">LOCAL HISTORY</div><h2>Recent captures</h2></div><span>Last 5 · Audio is never saved</span></div>
+        <div class="result-card"><ul id="history" class="history-list" aria-label="Recent captures"></ul></div>
       </section>
       <section id="models-view" class="models-page hidden">
         <div class="history-page-title"><div><div class="eyebrow">SPEECH SETTINGS</div><h2>Speech models</h2></div><span>Runs entirely on this Mac</span></div>
@@ -97,7 +104,9 @@ export function renderMainView(iconUrl: string) {
   return {
     recordButton: element<HTMLButtonElement>("#record"),
     statusLabel: element<HTMLDivElement>("#status"),
+    recentHistory: element<HTMLUListElement>("#recent-history"),
     history: element<HTMLUListElement>("#history"),
+    viewAllHistory: element<HTMLButtonElement>("#view-all-history"),
     modelState: element<HTMLSpanElement>("#model-state"),
     shortcutEditor: element<HTMLButtonElement>("#shortcut-editor"),
     shortcutDisplay: element<HTMLDivElement>("#shortcut-display"),

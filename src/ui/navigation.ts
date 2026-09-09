@@ -1,6 +1,6 @@
 import type { MainView } from "./mainView";
 
-export function setupNavigation(view: MainView) {
+export function setupNavigation(view: MainView, onShowHistory: () => void = () => undefined) {
   const setDrawerOpen = (open: boolean) => {
     view.sideNav.classList.toggle("open", open);
     view.navBackdrop.classList.toggle("open", open);
@@ -25,10 +25,18 @@ export function setupNavigation(view: MainView) {
   view.navBackdrop.addEventListener("click", () => setDrawerOpen(false));
   view.navHome.addEventListener("click", () => showPage("home"));
   view.navModels.addEventListener("click", () => showPage("models"));
-  view.navHistory.addEventListener("click", () => showPage("history"));
+  view.navHistory.addEventListener("click", () => {
+    onShowHistory();
+    showPage("history");
+  });
+  view.viewAllHistory.addEventListener("click", () => {
+    onShowHistory();
+    showPage("history");
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") setDrawerOpen(false);
   });
 
+  showPage("home");
   return { showPage };
 }

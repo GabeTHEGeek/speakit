@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8"><title>SpeakIt dictation pipeline regression</title></head>
+  <body>
+    <button id="record" type="button"></button>
+    <button id="diagnostics" type="button"></button>
+    <div id="status"></div>
+    <div id="model-setup" class="hidden"></div>
+    <script type="module">
+      import { DictationFlow } from "../src/features/dictation/dictationFlow.ts";
+
+      let recorderStarts = 0;
+      let targetRequests = 0;
+      let resolveFirstTranscription;
+      const firstTranscription = new Promise((resolve) => { resolveFirstTranscription = resolve; });
+      const pasted = [];
+
+      const recorder = {
+        async start() {
+          recorderStarts += 1;
+          return 48_000;
+        },
+        async stop() {
+          return {
+            downsampled: new Float32Array(8_000),
+            inputRate: 48_000,
+            inputSamples: 24_000,
+          };
+        },
+        cancelPendingStart() {},
+      };
+
+      const commands = {
+        async playActivationSound() {},
+        async playStopSound() {},
+        async frontmostTarget() {
+          targetRequests += 1;
+          return targetRequests === 1
+            ? { appName: "First App", pid: 101, anchorX: 100, anchorY: 200 }
+            : { appName: "Second App", pid: 202, anchorX: 300, anchorY: 400 };
+        },
+        async mainWindowTarget() {
+          return { appName: "SpeakIt", pid: 303, anchorX: 0, anchorY: 0 };
+        },
+        async showOverlay() {},
+        async hideOverlay() {},
+        async transcribe() {
+          return firstTranscription;
+        },
+        async pasteText(text, appName, targetPid) {
+          pasted.push({ text, appName, targetPid });
+          return { focusedRole: "AXTextArea", focusedSubrole: "" };
+        },
+      };
+
+      const view = {
+        recordButton: document.querySelector("#record"),
+        runDiagnosticsButton: document.querySelector("#diagnostics"),
+        statusLabel: document.querySelector("#status"),
+        modelSetup: document.querySelector("#model-setup"),
+      };
+      const flow = new DictationFlow(
+        view,
+        recorder,
+        () => "Alt+Space",
+        () => true,
+        () => "canary",
+        () => {},
+        commands,
+      );
+      flow.setModelReady(true);
+
+      await flow.start(true);
+      await flow.stop();
+      await flow.start(true);
+      document.body.dataset.secondStartedBeforeFirstFinished = String(
+        recorderStarts === 2 && pasted.length === 0,
+      );
+
+      resolveFirstTranscription("First result.");
+      for (let attempt = 0; attempt < 100 && pasted.length === 0; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      document.body.dataset.originalTargetPreserved = String(
+        pasted.length === 1
+          && pasted[0].text === "First result."
+          && pasted[0].appName === "First App"
+          && pasted[0].targetPid === 101,
+      );
+      document.body.dataset.pipelineReady = "true";
+    </script>
+  </body>
+</html>

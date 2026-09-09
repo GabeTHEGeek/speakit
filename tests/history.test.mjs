@@ -47,3 +47,13 @@ test("storage errors are reported without pretending data was saved or deleted",
   assert.throws(() => history.remove(before[0].id));
   assert.deepEqual(history.list(), before);
 });
+
+test("refreshes from saved history before adding a new dictation", () => {
+  const storage = memoryStorage();
+  const firstWindow = createHistoryStore(storage);
+  const secondWindow = createHistoryStore(storage);
+  firstWindow.add("Saved by the active dictation window");
+  assert.deepEqual(secondWindow.list().map((entry) => entry.text), ["Saved by the active dictation window"]);
+  secondWindow.add("Newest dictation");
+  assert.deepEqual(firstWindow.list().map((entry) => entry.text), ["Newest dictation", "Saved by the active dictation window"]);
+});

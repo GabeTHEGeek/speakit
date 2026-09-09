@@ -18,7 +18,6 @@ export const native = {
   diagnostics: (engine: SpeechEngine) => invoke<DiagnosticReport>("diagnostics", { engine }),
   downloadModel: () => invoke("download_model"),
   downloadCanaryModel: () => invoke("download_canary_model"),
-  eraseTriggerSpace: () => invoke("erase_trigger_space"),
   frontmostTarget: () => invoke<ActiveTarget>("frontmost_target"),
   hideOverlay: () => invoke("hide_overlay"),
   mainWindowTarget: () => invoke<ActiveTarget>("main_window_target"),

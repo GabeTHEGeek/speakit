@@ -5,6 +5,8 @@ import { settings } from "../../services/settings";
 import type { SpeechEngine } from "../../services/settings";
 import { errorDetails, logEvent, native } from "../../platform/native";
 
+type CompletedRecording = NonNullable<Awaited<ReturnType<AudioRecorder["stop"]>>>;
+
 export class DictationFlow {
   private status: AppStatus = "ready";
   private focusTarget: FocusTarget | null = null;
@@ -13,6 +15,9 @@ export class DictationFlow {
   private manualButtonHeld = false;
   private startCanceled = false;
   private lastOverlayAnchor = settings.overlayAnchor;
+  private processingQueue: Promise<void> = Promise.resolve();
+  private pendingProcessing = 0;
+  private lastProcessingMessage = "Focus a text box, then hold the shortcut";
 
   constructor(
     private view: MainView,
@@ -21,6 +26,7 @@ export class DictationFlow {
     private shortcutHeld: () => boolean,
     private speechEngine: () => SpeechEngine,
     private onTranscript: (text: string) => void,
+    private commands: typeof native = native,
   ) {}
 
   get isReady() { return this.status === "ready"; }
@@ -31,6 +37,7 @@ export class DictationFlow {
     document.body.dataset.status = next;
     this.view.statusLabel.textContent = message;
     this.view.recordButton.classList.toggle("active", next === "recording");
+    this.view.runDiagnosticsButton.disabled = next !== "ready";
   }
 
   attachManualControls() {
@@ -45,7 +52,7 @@ export class DictationFlow {
     });
   }
 
-  async start(requireTextField = true) {
+  async start(requireTextField = true, microphoneRetry = 0): Promise<void> {
     if (this.status !== "ready") return;
     if (!this.modelReady) {
       this.view.modelSetup.classList.remove("hidden");
@@ -55,30 +62,29 @@ export class DictationFlow {
     this.startCanceled = false;
     this.setStatus("starting", "Starting microphone…");
     try {
-      void native.playActivationSound().catch((error) => logEvent("sound.start.failed", errorDetails(error)));
+      if (microphoneRetry === 0) {
+        void this.commands.playActivationSound().catch((error) => logEvent("sound.start.failed", errorDetails(error)));
+      }
       const shortcut = this.shortcutValue();
       logEvent("recording.start.requested", `shortcut=${shortcut} modelReady=${this.modelReady}`);
-      const targetPromise = (requireTextField ? native.frontmostTarget() : native.mainWindowTarget())
+      const targetPromise = (requireTextField ? this.commands.frontmostTarget() : this.commands.mainWindowTarget())
         .catch(() => ({ appName: "", pid: 0, anchorX: 0, anchorY: 0 } as ActiveTarget));
       const earlyOverlayPromise = requireTextField
-        ? native.showOverlay(this.lastOverlayAnchor.x, this.lastOverlayAnchor.y)
+        ? this.commands.showOverlay(this.lastOverlayAnchor.x, this.lastOverlayAnchor.y)
           .catch((error) => logEvent("overlay.early.failed", errorDetails(error)))
         : targetPromise
-          .then((target) => native.showOverlay(target.anchorX, target.anchorY))
+          .then((target) => this.commands.showOverlay(target.anchorX, target.anchorY))
           .catch((error) => logEvent("overlay.early.failed", errorDetails(error)));
-      if (requireTextField && shortcut.endsWith("+Space") && !/(Command|Control)/.test(shortcut)) {
-        await native.eraseTriggerSpace();
-      }
       const sampleRate = await this.recorder.start();
       if (this.startCanceled || (requireTextField && !this.shortcutHeld()) || (!requireTextField && !this.manualButtonHeld)) {
         await this.recorder.stop();
-        await native.hideOverlay().catch(() => undefined);
+        await this.commands.hideOverlay().catch(() => undefined);
         this.setStatus("ready", "Focus a text box, then hold the shortcut");
         return;
       }
       const target = await targetPromise;
       await earlyOverlayPromise;
-      await native.showOverlay(target.anchorX, target.anchorY);
+      await this.commands.showOverlay(target.anchorX, target.anchorY);
       if (requireTextField && (target.anchorX !== 0 || target.anchorY !== 0)) {
         this.lastOverlayAnchor = { x: target.anchorX, y: target.anchorY };
         settings.overlayAnchor = this.lastOverlayAnchor;
@@ -92,13 +98,27 @@ export class DictationFlow {
     } catch (error) {
       if (this.startCanceled || String(error).includes("Recording start canceled")) {
         logEvent("recording.start.canceled");
-        await native.hideOverlay().catch(() => undefined);
+        await this.commands.hideOverlay().catch(() => undefined);
         this.setStatus("ready", "Focus a text box, then hold the shortcut");
         return;
       }
       logEvent("recording.start.failed", errorDetails(error));
-      await native.hideOverlay().catch(() => undefined);
-      const message = String(error).includes("did not respond")
+      await this.commands.hideOverlay().catch(() => undefined);
+      const microphoneStalled = String(error).includes("did not respond");
+      const activationHeld = requireTextField ? this.shortcutHeld() : this.manualButtonHeld;
+      if (microphoneStalled && microphoneRetry === 0 && activationHeld) {
+        logEvent("recording.start.retry", "microphone stalled; retrying once while shortcut remains held");
+        this.setStatus("starting", "Retrying microphone…");
+        await new Promise((resolve) => window.setTimeout(resolve, 180));
+        const stillHeld = requireTextField ? this.shortcutHeld() : this.manualButtonHeld;
+        if (this.startCanceled || !stillHeld) {
+          this.setStatus("ready", "Focus a text box, then hold the shortcut");
+          return;
+        }
+        this.setStatus("ready", "Retrying microphone…");
+        return this.start(requireTextField, 1);
+      }
+      const message = microphoneStalled
         ? "Microphone is busy — try again after the call app releases it"
         : String(error).includes("Accessibility") ? "Enable Accessibility access for SpeakIt" : "Microphone access is needed";
       this.setStatus("error", message);
@@ -111,13 +131,13 @@ export class DictationFlow {
       this.startCanceled = true;
       this.recorder.cancelPendingStart();
       this.setStatus("starting", "Canceling microphone start…");
-      await native.hideOverlay().catch(() => undefined);
+      await this.commands.hideOverlay().catch(() => undefined);
       return;
     }
     if (this.status !== "recording") return;
     this.setStatus("transcribing", "Turning speech into text…");
-    void native.playStopSound().catch((error) => logEvent("sound.stop.failed", errorDetails(error)));
-    await native.hideOverlay();
+    void this.commands.playStopSound().catch((error) => logEvent("sound.stop.failed", errorDetails(error)));
+    await this.commands.hideOverlay();
     const recording = await this.recorder.stop();
     if (!recording) return;
     logEvent("recording.stopped", `inputSamples=${recording.inputSamples} outputSamples=${recording.downsampled.length} inputRate=${recording.inputRate}`);
@@ -125,21 +145,59 @@ export class DictationFlow {
       this.setStatus("ready", "Too short — try again");
       return;
     }
+    const focusTarget = this.focusTarget;
+    const targetPid = this.targetPid;
+    const engine = this.speechEngine();
+    this.focusTarget = null;
+    this.targetPid = 0;
+    this.enqueueProcessing(recording, focusTarget, targetPid, engine);
+    this.setStatus("ready", this.pendingProcessing === 1 ? "Processing previous dictation…" : `${this.pendingProcessing} dictations processing…`);
+  }
+
+  private enqueueProcessing(
+    recording: CompletedRecording,
+    focusTarget: FocusTarget | null,
+    targetPid: number,
+    engine: SpeechEngine,
+  ) {
+    this.pendingProcessing += 1;
+    logEvent("transcription.queued", `pending=${this.pendingProcessing} samples=${recording.downsampled.length}`);
+    const process = async () => {
+      try {
+        this.lastProcessingMessage = await this.processRecording(recording, focusTarget, targetPid, engine);
+      } catch (error) {
+        logEvent("transcription.pipeline.failed", errorDetails(error));
+        this.lastProcessingMessage = `Dictation failed: ${String(error)}`;
+      } finally {
+        this.pendingProcessing -= 1;
+        if (this.status === "ready") {
+          const message = this.pendingProcessing > 0
+            ? `${this.pendingProcessing} dictation${this.pendingProcessing === 1 ? "" : "s"} processing…`
+            : this.lastProcessingMessage;
+          this.setStatus("ready", message);
+        }
+      }
+    };
+    this.processingQueue = this.processingQueue.then(process, process);
+  }
+
+  private async processRecording(
+    recording: CompletedRecording,
+    focusTarget: FocusTarget | null,
+    targetPid: number,
+    engine: SpeechEngine,
+  ) {
     let text: string;
     try {
-      const engine = this.speechEngine();
       logEvent("transcription.requested", `engine=${engine} samples=${recording.downsampled.length}`);
-      text = await native.transcribe(recording.downsampled, engine);
+      text = await this.commands.transcribe(recording.downsampled, engine);
       logEvent("transcription.succeeded", `chars=${text.length}`);
     } catch (error) {
       logEvent("transcription.failed", errorDetails(error));
-      this.setStatus("error", `Transcription failed: ${String(error)}`);
-      setTimeout(() => this.setStatus("ready", "Focus a text box, then hold the shortcut"), 2500);
-      return;
+      return `Transcription failed: ${String(error)}`;
     }
     if (!text) {
-      this.setStatus("ready", "No speech detected");
-      return;
+      return "No speech detected";
     }
     let historySaved = true;
     try { this.onTranscript(text); }
@@ -147,19 +205,17 @@ export class DictationFlow {
       historySaved = false;
       logEvent("history.save.failed", errorDetails(error));
     }
-    if (!this.focusTarget?.canPaste) {
-      this.setStatus("ready", historySaved ? "Test dictation saved — use Copy to copy it" : "Dictation complete, but local history could not be saved");
-      return;
+    if (!focusTarget?.canPaste) {
+      return historySaved ? "Test dictation saved — use Copy to copy it" : "Dictation complete, but local history could not be saved";
     }
     try {
-      logEvent("paste.requested", `target=${this.focusTarget.appName} pid=${this.targetPid}`);
-      const result = await native.pasteText(text, this.focusTarget.appName, this.targetPid);
-      logEvent("paste.succeeded", `target=${this.focusTarget.appName} role=${result.focusedRole} subrole=${result.focusedSubrole}`);
-      this.setStatus("ready", historySaved ? "Pasted into your focused text field" : "Pasted, but local history could not be saved");
+      logEvent("paste.requested", `target=${focusTarget.appName} pid=${targetPid}`);
+      const result = await this.commands.pasteText(text, focusTarget.appName, targetPid);
+      logEvent("paste.succeeded", `target=${focusTarget.appName} role=${result.focusedRole} subrole=${result.focusedSubrole}`);
+      return historySaved ? "Pasted into your focused text field" : "Pasted, but local history could not be saved";
     } catch (error) {
       logEvent("paste.failed", errorDetails(error));
-      this.setStatus("error", `Copied, but automatic paste failed: ${String(error)}`);
-      setTimeout(() => this.setStatus("ready", "Press ⌘ V to paste the copied text"), 3200);
+      return `Copied, but automatic paste failed: ${String(error)} — press ⌘ V`;
     }
   }
 }

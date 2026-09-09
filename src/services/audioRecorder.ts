@@ -24,11 +24,23 @@ export class AudioRecorder {
   private lastLevelUpdate = 0;
   private levelMeter = new AdaptiveAudioLevel();
   private startAttempt = 0;
+  private recoveryTimer: number | null = null;
+  private disposed = false;
 
   async prepare() {
-    const hasLiveTrack = this.preparedStream?.getAudioTracks()
-      .some((track) => track.readyState === "live") ?? false;
-    if (!this.preparedStream?.active || !hasLiveTrack) {
+    this.disposed = false;
+    if (this.recoveryTimer !== null) window.clearTimeout(this.recoveryTimer);
+    this.recoveryTimer = null;
+    const preparedTracks = this.preparedStream?.getAudioTracks() ?? [];
+    const hasUsableTrack = preparedTracks.some((track) => track.readyState === "live" && !track.muted);
+    if (this.preparedStream && (!this.preparedStream.active || !hasUsableTrack)) {
+      logEvent("microphone.warm.stale", preparedTracks
+        .map((track) => `state=${track.readyState} muted=${track.muted}`)
+        .join(" "));
+      this.preparedStream.getTracks().forEach((track) => track.stop());
+      this.preparedStream = null;
+    }
+    if (!this.preparedStream) {
       const started = performance.now();
       logEvent("microphone.acquire.started", "timeout_ms=3000");
       this.preparedStream = await withTimeout(
@@ -138,18 +150,45 @@ export class AudioRecorder {
   }
 
   dispose() {
+    this.disposed = true;
     this.startAttempt += 1;
+    if (this.recoveryTimer !== null) window.clearTimeout(this.recoveryTimer);
+    this.recoveryTimer = null;
     this.preparedStream?.getTracks().forEach((track) => track.stop());
     this.preparedStream = null;
   }
 
   private watchPreparedStream(stream: MediaStream) {
     stream.getAudioTracks().forEach((track) => {
+      track.addEventListener("mute", () => {
+        logEvent("microphone.track.muted", `label=${track.label || "audio track"} recording=${Boolean(this.audioContext)}`);
+      });
+      track.addEventListener("unmute", () => {
+        logEvent("microphone.track.unmuted", `label=${track.label || "audio track"}`);
+      });
       track.addEventListener("ended", () => {
         logEvent("microphone.track.ended", `label=${track.label || "audio track"}`);
-        if (this.preparedStream === stream) this.preparedStream = null;
+        if (this.preparedStream === stream) {
+          this.preparedStream = null;
+          this.scheduleWarmRecovery();
+        }
       }, { once: true });
     });
+  }
+
+  private scheduleWarmRecovery() {
+    if (this.disposed || this.recoveryTimer !== null) return;
+    this.recoveryTimer = window.setTimeout(async () => {
+      this.recoveryTimer = null;
+      if (this.disposed || this.preparedStream) return;
+      try {
+        const stream = await this.prepare();
+        if (!this.audioContext) stream.getTracks().forEach((track) => { track.enabled = false; });
+        logEvent("microphone.warm.recovered", "ended track replaced before next shortcut");
+      } catch (error) {
+        logEvent("microphone.warm.recovery.failed", String(error));
+      }
+    }, 250);
   }
 }
 
