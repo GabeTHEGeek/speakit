@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8"><title>SpeakIt microphone recovery regression</title></head>
+  <body>
+    <script type="module">
+      import { AudioRecorder } from "../src/services/audioRecorder.ts";
+
+      let acquireCalls = 0;
+      let resolveAcquisition;
+      const track = {
+        enabled: false,
+        muted: false,
+        readyState: "live",
+        label: "Delayed microphone",
+        stopped: false,
+        addEventListener() {},
+        stop() { this.stopped = true; this.readyState = "ended"; },
+      };
+      const stream = {
+        active: true,
+        getAudioTracks: () => [track],
+        getTracks: () => [track],
+      };
+      const acquire = () => {
+        acquireCalls += 1;
+        return new Promise((resolve) => { resolveAcquisition = resolve; });
+      };
+      const recorder = new AudioRecorder(acquire, 20);
+
+      let firstTimedOut = false;
+      try {
+        await recorder.prepare();
+      } catch (error) {
+        firstTimedOut = error?.name === "OperationTimeoutError";
+      }
+      const retry = recorder.prepare();
+      resolveAcquisition(stream);
+      const recovered = await retry;
+
+      document.body.dataset.firstTimedOut = String(firstTimedOut);
+      document.body.dataset.pendingRequestReused = String(acquireCalls === 1);
+      document.body.dataset.lateStreamRetained = String(recovered === stream && !track.stopped);
+      document.body.dataset.audioRecoveryReady = "true";
+    </script>
+  </body>
+</html>

@@ -111,6 +111,23 @@ async function readDictationPipeline(debuggerClient) {
   throw new Error("The rapid-repeat dictation regression did not finish");
 }
 
+async function readAudioRecovery(debuggerClient) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const response = await debuggerClient.call("Runtime.evaluate", {
+      expression: `({
+        ready: document.body?.dataset.audioRecoveryReady === "true",
+        firstTimedOut: document.body?.dataset.firstTimedOut,
+        pendingRequestReused: document.body?.dataset.pendingRequestReused,
+        lateStreamRetained: document.body?.dataset.lateStreamRetained
+      })`,
+      returnByValue: true,
+    });
+    if (response.result.value?.ready) return response.result.value;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("The delayed microphone recovery regression did not finish");
+}
+
 test("real browser regressions cover the home layout and rapid-repeat dictation", { timeout: 30_000 }, async () => {
   const profile = await mkdtemp(path.join(os.tmpdir(), "speakit-layout-"));
   const server = spawn(path.join(projectRoot, "node_modules/.bin/vite"), ["--host", "127.0.0.1", "--port", "4178", "--strictPort"], {
@@ -160,6 +177,14 @@ test("real browser regressions cover the home layout and rapid-repeat dictation"
       ready: true,
       secondStartedBeforeFirstFinished: "true",
       originalTargetPreserved: "true",
+    });
+    await debuggerClient.call("Page.navigate", { url: "http://127.0.0.1:4178/tests/audio-recovery.html" });
+    const audioRecovery = await readAudioRecovery(debuggerClient);
+    assert.deepEqual(audioRecovery, {
+      ready: true,
+      firstTimedOut: "true",
+      pendingRequestReused: "true",
+      lateStreamRetained: "true",
     });
   } finally {
     debuggerClient?.close();

@@ -1,7 +1,7 @@
 import { emitTo } from "@tauri-apps/api/event";
 import { logEvent } from "../platform/native";
 import { AdaptiveAudioLevel } from "./audioLevel";
-import { withTimeout } from "./promiseTimeout";
+import { OperationTimeoutError, withTimeout } from "./promiseTimeout";
 
 export const microphoneConstraints: MediaTrackConstraints = {
   channelCount: 1,
@@ -26,6 +26,13 @@ export class AudioRecorder {
   private startAttempt = 0;
   private recoveryTimer: number | null = null;
   private disposed = false;
+  private pendingAcquisition: Promise<MediaStream> | null = null;
+  private acquisitionTimeouts = 0;
+
+  constructor(
+    private acquireStream: () => Promise<MediaStream> = requestMicrophoneStream,
+    private acquisitionTimeoutMs = 3_000,
+  ) {}
 
   async prepare() {
     this.disposed = false;
@@ -42,23 +49,37 @@ export class AudioRecorder {
     }
     if (!this.preparedStream) {
       const started = performance.now();
-      logEvent("microphone.acquire.started", "timeout_ms=3000");
-      this.preparedStream = await withTimeout(
-        requestMicrophoneStream(),
-        3_000,
-        "The microphone did not respond. Another call or app may be using it.",
-        (lateStream) => lateStream.getTracks().forEach((track) => track.stop()),
+      const reusedPendingAcquisition = Boolean(this.pendingAcquisition);
+      const acquisition = this.pendingAcquisition ?? this.startAcquisition();
+      logEvent(
+        reusedPendingAcquisition ? "microphone.acquire.awaiting" : "microphone.acquire.waiting",
+        `timeout_ms=${this.acquisitionTimeoutMs}`,
       );
-      logEvent("microphone.acquire.complete", `elapsed_ms=${Math.round(performance.now() - started)}`);
-      logEvent("microphone.acquired", "raw mono; voice processing disabled");
-      this.watchPreparedStream(this.preparedStream);
+      try {
+        this.preparedStream = await withTimeout(
+          acquisition,
+          this.acquisitionTimeoutMs,
+          "The microphone did not respond. Another call or app may be using it.",
+        );
+        this.acquisitionTimeouts = 0;
+        logEvent("microphone.acquire.complete", `elapsed_ms=${Math.round(performance.now() - started)}`);
+      } catch (error) {
+        if (error instanceof OperationTimeoutError) {
+          this.acquisitionTimeouts += 1;
+          if (this.acquisitionTimeouts >= 2 && this.pendingAcquisition === acquisition) {
+            this.pendingAcquisition = null;
+            this.acquisitionTimeouts = 0;
+            logEvent("microphone.acquire.abandoned", "two waits timed out; next shortcut may start a fresh request");
+          }
+        }
+        throw error;
+      }
     }
     return this.preparedStream;
   }
 
   setPreparedStream(stream: MediaStream) {
-    this.preparedStream = stream;
-    this.watchPreparedStream(stream);
+    this.acceptAcquiredStream(stream);
   }
 
   async start() {
@@ -156,6 +177,7 @@ export class AudioRecorder {
     this.recoveryTimer = null;
     this.preparedStream?.getTracks().forEach((track) => track.stop());
     this.preparedStream = null;
+    this.pendingAcquisition = null;
   }
 
   private watchPreparedStream(stream: MediaStream) {
@@ -174,6 +196,43 @@ export class AudioRecorder {
         }
       }, { once: true });
     });
+  }
+
+  private startAcquisition() {
+    logEvent("microphone.acquire.started", `timeout_ms=${this.acquisitionTimeoutMs}`);
+    const acquisition = this.acquireStream().then(
+      (stream) => {
+        const accepted = this.acceptAcquiredStream(stream);
+        if (this.pendingAcquisition === acquisition) this.pendingAcquisition = null;
+        return accepted;
+      },
+      (error) => {
+        if (this.pendingAcquisition === acquisition) this.pendingAcquisition = null;
+        throw error;
+      },
+    );
+    this.pendingAcquisition = acquisition;
+    return acquisition;
+  }
+
+  private acceptAcquiredStream(stream: MediaStream) {
+    if (this.disposed) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new Error("Microphone recorder is no longer active");
+    }
+    if (this.preparedStream === stream) return stream;
+    const existingTrack = this.preparedStream?.getAudioTracks()
+      .find((track) => track.readyState === "live" && !track.muted);
+    if (existingTrack && this.preparedStream) {
+      stream.getTracks().forEach((track) => track.stop());
+      logEvent("microphone.acquire.late.ignored", "another usable microphone stream is already ready");
+      return this.preparedStream;
+    }
+    this.preparedStream?.getTracks().forEach((track) => track.stop());
+    this.preparedStream = stream;
+    this.watchPreparedStream(stream);
+    logEvent("microphone.acquired", "raw mono; voice processing disabled");
+    return stream;
   }
 
   private scheduleWarmRecovery() {
