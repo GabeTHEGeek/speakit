@@ -101,7 +101,9 @@ async function readDictationPipeline(debuggerClient) {
       expression: `({
         ready: document.body?.dataset.pipelineReady === "true",
         secondStartedBeforeFirstFinished: document.body?.dataset.secondStartedBeforeFirstFinished,
-        originalTargetPreserved: document.body?.dataset.originalTargetPreserved
+        originalTargetPreserved: document.body?.dataset.originalTargetPreserved,
+        audioHostFocusRestored: document.body?.dataset.audioHostFocusRestored,
+        targetCapturedBeforeWake: document.body?.dataset.targetCapturedBeforeWake
       })`,
       returnByValue: true,
     });
@@ -177,6 +179,8 @@ test("real browser regressions cover the home layout and rapid-repeat dictation"
       ready: true,
       secondStartedBeforeFirstFinished: "true",
       originalTargetPreserved: "true",
+      audioHostFocusRestored: "true",
+      targetCapturedBeforeWake: "true",
     });
     await debuggerClient.call("Page.navigate", { url: "http://127.0.0.1:4178/tests/audio-recovery.html" });
     const audioRecovery = await readAudioRecovery(debuggerClient);

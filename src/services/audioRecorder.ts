@@ -34,6 +34,11 @@ export class AudioRecorder {
     private acquisitionTimeoutMs = 3_000,
   ) {}
 
+  get needsAcquisition() {
+    return !(this.preparedStream?.active
+      && this.preparedStream.getAudioTracks().some((track) => track.readyState === "live" && !track.muted));
+  }
+
   async prepare() {
     this.disposed = false;
     if (this.recoveryTimer !== null) window.clearTimeout(this.recoveryTimer);

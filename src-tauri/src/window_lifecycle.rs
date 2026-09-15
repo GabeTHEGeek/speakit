@@ -1,10 +1,11 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::{WebviewWindow, Window};
+use tauri::{Manager, WebviewWindow, Window};
 
-use crate::logging::append_log;
+use crate::{insertion::activate_process, logging::append_log};
 
 static MAIN_WINDOW_PARKED: AtomicBool = AtomicBool::new(false);
+static AUDIO_HOST_WOKEN: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn park_main_window(window: &Window) -> Result<(), String> {
     set_native_window_state(window.ns_window().map_err(|error| error.to_string())?, true);
@@ -36,6 +37,46 @@ pub(crate) fn restore_main_window(window: &WebviewWindow) -> Result<(), String> 
 
 pub(crate) fn main_window_is_parked() -> bool {
     MAIN_WINDOW_PARKED.load(Ordering::Acquire)
+}
+
+#[tauri::command]
+pub(crate) fn wake_audio_host(app: tauri::AppHandle) -> Result<bool, String> {
+    if !main_window_is_parked() {
+        return Ok(false);
+    }
+    let window = app
+        .get_webview_window("main")
+        .ok_or("SpeakIt audio host is unavailable")?;
+    window
+        .set_focusable(true)
+        .map_err(|error| error.to_string())?;
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())?;
+    AUDIO_HOST_WOKEN.store(true, Ordering::Release);
+    append_log(
+        "microphone.host.woken",
+        "parked webview focused invisibly for microphone reacquisition",
+    );
+    Ok(true)
+}
+
+#[tauri::command]
+pub(crate) fn release_audio_host(app: tauri::AppHandle, target_pid: i32) -> Result<(), String> {
+    if !AUDIO_HOST_WOKEN.swap(false, Ordering::AcqRel) || !main_window_is_parked() {
+        return Ok(());
+    }
+    let window = app
+        .get_webview_window("main")
+        .ok_or("SpeakIt audio host is unavailable")?;
+    window
+        .set_focusable(false)
+        .map_err(|error| error.to_string())?;
+    activate_process(target_pid)?;
+    append_log(
+        "microphone.host.released",
+        &format!("parked webview returned focus to pid={target_pid}"),
+    );
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]

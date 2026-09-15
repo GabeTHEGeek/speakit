@@ -19,6 +19,6 @@ test("shortcut assignment requires a modifier combination", async () => {
 test("Space shortcuts never delete existing text before recording", async () => {
   const source = await readFile(new URL("../src/features/dictation/dictationFlow.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /eraseTriggerSpace|triggerCleanup/);
-  assert.match(source, /const sampleRate = await this\.recorder\.start\(\)/);
+  assert.match(source, /sampleRate = await this\.recorder\.start\(\)/);
   assert.match(source, /runDiagnosticsButton\.disabled = next !== "ready"/);
 });

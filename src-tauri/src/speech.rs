@@ -287,7 +287,9 @@ fn format_dictation(text: &str) -> String {
 
         let spoken_mark = match (lower.as_str(), next.as_deref()) {
             ("comma", _) => Some((",", 1)),
-            ("period", _) | ("full", Some("stop")) => Some((".", if lower == "full" { 2 } else { 1 })),
+            ("period", _) | ("full", Some("stop")) => {
+                Some((".", if lower == "full" { 2 } else { 1 }))
+            }
             ("question", Some("mark")) => Some(("?", 2)),
             ("exclamation", Some("mark" | "point")) => Some(("!", 2)),
             ("new", Some("paragraph")) => Some(("\n\n", 2)),
@@ -307,8 +309,10 @@ fn format_dictation(text: &str) -> String {
         }
 
         let starts_question = question_opening(&lower, next.as_deref());
-        let transition = matches!(lower.as_str(), "maybe" | "additionally" | "secondly" | "thirdly" | "finally")
-            || (lower == "so" && next.as_deref() != Some("that"));
+        let transition = matches!(
+            lower.as_str(),
+            "maybe" | "additionally" | "secondly" | "thirdly" | "finally"
+        ) || (lower == "so" && next.as_deref() != Some("that"));
         let needs_sentence_break = words_in_sentence >= 7 && (starts_question || transition);
         if needs_sentence_break {
             finish_sentence(&mut output, question_sentence);
@@ -326,7 +330,11 @@ fn format_dictation(text: &str) -> String {
         if words_in_sentence == 0 && starts_question {
             question_sentence = true;
         }
-        let written = if capitalize_next { capitalize(word) } else { word.to_string() };
+        let written = if capitalize_next {
+            capitalize(word)
+        } else {
+            word.to_string()
+        };
         push_word(&mut output, &written);
         words_in_sentence += 1;
         capitalize_next = false;
@@ -336,7 +344,10 @@ fn format_dictation(text: &str) -> String {
             question_sentence = false;
             capitalize_next = true;
         } else if words_in_sentence == 1
-            && matches!(lower.as_str(), "however" | "additionally" | "secondly" | "thirdly" | "finally")
+            && matches!(
+                lower.as_str(),
+                "however" | "additionally" | "secondly" | "thirdly" | "finally"
+            )
         {
             trim_space(&mut output);
             output.push_str(", ");
@@ -360,9 +371,14 @@ fn question_opening(word: &str, next: Option<&str>) -> bool {
         "how" | "why" | "when" | "where" | "who" => true,
         "is" => matches!(next, Some("there" | "this" | "that" | "it")),
         "are" => matches!(next, Some("there" | "you" | "we")),
-        "can" | "could" | "would" | "should" | "will" | "do" | "does" | "did" =>
-            matches!(next, Some("i" | "you" | "we" | "it" | "this" | "that" | "there")),
-        "what" => matches!(next, Some("is" | "are" | "can" | "could" | "do" | "does" | "did" | "would" | "should")),
+        "can" | "could" | "would" | "should" | "will" | "do" | "does" | "did" => matches!(
+            next,
+            Some("i" | "you" | "we" | "it" | "this" | "that" | "there")
+        ),
+        "what" => matches!(
+            next,
+            Some("is" | "are" | "can" | "could" | "do" | "does" | "did" | "would" | "should")
+        ),
         _ => false,
     }
 }
@@ -376,7 +392,9 @@ fn push_word(output: &mut String, word: &str) {
 
 fn capitalize(word: &str) -> String {
     let mut characters = word.chars();
-    let Some(first) = characters.next() else { return String::new() };
+    let Some(first) = characters.next() else {
+        return String::new();
+    };
     first.to_uppercase().chain(characters).collect()
 }
 
@@ -387,11 +405,14 @@ fn trim_space(output: &mut String) {
 }
 
 fn word_ends_sentence(word: &str) -> bool {
-    word.trim_end_matches(['"', '\'', ')', ']', '}']).ends_with(['.', '!', '?', '…'])
+    word.trim_end_matches(['"', '\'', ')', ']', '}'])
+        .ends_with(['.', '!', '?', '…'])
 }
 
 fn ends_with_punctuation(output: &str) -> bool {
-    output.trim_end().ends_with([',', '.', '!', '?', '…', ':', ';', '\n'])
+    output
+        .trim_end()
+        .ends_with([',', '.', '!', '?', '…', ':', ';', '\n'])
 }
 
 fn finish_sentence(output: &mut String, question: bool) {

@@ -32,4 +32,6 @@ export const native = {
   requestAccessibilityPermission: () => invoke("request_accessibility_permission"),
   showOverlay: (anchorX: number, anchorY: number) => invoke("show_overlay", { anchorX, anchorY }),
   transcribe: (samples: Float32Array, engine: SpeechEngine) => invoke<string>("transcribe", { samples: Array.from(samples), engine }),
+  wakeAudioHost: () => invoke<boolean>("wake_audio_host"),
+  releaseAudioHost: (targetPid: number) => invoke("release_audio_host", { targetPid }),
 };

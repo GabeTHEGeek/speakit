@@ -6,6 +6,31 @@ use crate::{logging::append_log, permissions::accessibility_ready, process::outp
 
 const SYSTEM_HELPER_TIMEOUT: Duration = Duration::from_secs(2);
 
+pub(crate) fn activate_process(target_pid: i32) -> Result<(), String> {
+    if target_pid <= 0 {
+        return Ok(());
+    }
+    let script = r#"
+on run argv
+  set targetPid to (item 1 of argv) as integer
+  tell application "System Events"
+    set targetProcess to first application process whose unix id is targetPid
+    set frontmost of targetProcess to true
+  end tell
+end run
+"#;
+    let pid = target_pid.to_string();
+    let output = output_with_timeout(
+        Command::new("osascript").args(["-e", script, "--", &pid]),
+        SYSTEM_HELPER_TIMEOUT,
+    )?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PasteResult {

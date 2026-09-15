@@ -75,14 +75,30 @@ export class DictationFlow {
         : targetPromise
           .then((target) => this.commands.showOverlay(target.anchorX, target.anchorY))
           .catch((error) => logEvent("overlay.early.failed", errorDetails(error)));
-      const sampleRate = await this.recorder.start();
+      const acquisitionTarget = this.recorder.needsAcquisition ? await targetPromise : null;
+      const audioHostWoken = acquisitionTarget
+        ? await this.commands.wakeAudioHost().catch((error) => {
+          logEvent("microphone.host.wake.failed", errorDetails(error));
+          return false;
+        })
+        : false;
+      let sampleRate: number;
+      try {
+        sampleRate = await this.recorder.start();
+      } finally {
+        if (audioHostWoken && acquisitionTarget) {
+          await this.commands.releaseAudioHost(acquisitionTarget.pid).catch((error) => {
+            logEvent("microphone.host.release.failed", errorDetails(error));
+          });
+        }
+      }
       if (this.startCanceled || (requireTextField && !this.shortcutHeld()) || (!requireTextField && !this.manualButtonHeld)) {
         await this.recorder.stop();
         await this.commands.hideOverlay().catch(() => undefined);
         this.setStatus("ready", "Focus a text box, then hold the shortcut");
         return;
       }
-      const target = await targetPromise;
+      const target = acquisitionTarget ?? await targetPromise;
       await earlyOverlayPromise;
       await this.commands.showOverlay(target.anchorX, target.anchorY);
       if (requireTextField && (target.anchorX !== 0 || target.anchorY !== 0)) {

@@ -14,8 +14,11 @@
       let resolveFirstTranscription;
       const firstTranscription = new Promise((resolve) => { resolveFirstTranscription = resolve; });
       const pasted = [];
+      const releasedAudioHosts = [];
+      const focusEvents = [];
 
       const recorder = {
+        needsAcquisition: true,
         async start() {
           recorderStarts += 1;
           return 48_000;
@@ -35,6 +38,7 @@
         async playStopSound() {},
         async frontmostTarget() {
           targetRequests += 1;
+          focusEvents.push(`target-${targetRequests}`);
           return targetRequests === 1
             ? { appName: "First App", pid: 101, anchorX: 100, anchorY: 200 }
             : { appName: "Second App", pid: 202, anchorX: 300, anchorY: 400 };
@@ -44,6 +48,8 @@
         },
         async showOverlay() {},
         async hideOverlay() {},
+        async wakeAudioHost() { focusEvents.push("wake"); return true; },
+        async releaseAudioHost(targetPid) { releasedAudioHosts.push(targetPid); },
         async transcribe() {
           return firstTranscription;
         },
@@ -75,6 +81,14 @@
       await flow.start(true);
       document.body.dataset.secondStartedBeforeFirstFinished = String(
         recorderStarts === 2 && pasted.length === 0,
+      );
+      document.body.dataset.audioHostFocusRestored = String(
+        releasedAudioHosts.length === 2
+          && releasedAudioHosts[0] === 101
+          && releasedAudioHosts[1] === 202,
+      );
+      document.body.dataset.targetCapturedBeforeWake = String(
+        focusEvents[0] === "target-1" && focusEvents[1] === "wake",
       );
 
       resolveFirstTranscription("First result.");

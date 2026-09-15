@@ -18,7 +18,10 @@ use overlay::{hide_overlay, main_window_target, show_overlay};
 use permissions::{accessibility_ready, app_install_location, request_accessibility_permission};
 use speech::{download_model, model_ready, prepare_model, transcribe};
 use tauri::Manager;
-use window_lifecycle::{main_window_is_parked, park_main_window, restore_main_window};
+use window_lifecycle::{
+    main_window_is_parked, park_main_window, release_audio_host, restore_main_window,
+    wake_audio_host,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -56,7 +59,9 @@ pub fn run() {
             hide_overlay,
             main_window_target,
             log_event,
-            diagnostics
+            diagnostics,
+            wake_audio_host,
+            release_audio_host
         ])
         .build(tauri::generate_context!())
         .expect("error while building SpeakIt");
