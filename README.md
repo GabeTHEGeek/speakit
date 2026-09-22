@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/macOS-13%2B-1f2421?style=flat-square&logo=apple&logoColor=white" alt="macOS 13 or newer">
   <img src="https://img.shields.io/badge/transcription-100%25%20local-ef603f?style=flat-square" alt="100 percent local transcription">
   <img src="https://img.shields.io/badge/cost-free-4a9c68?style=flat-square" alt="Free to use">
-  <img src="https://img.shields.io/badge/release-0.2.46-fb6542?style=flat-square" alt="SpeakIt release 0.2.46">
+  <img src="https://img.shields.io/badge/release-0.2.48-fb6542?style=flat-square" alt="SpeakIt release 0.2.48">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-4468a6?style=flat-square" alt="GNU General Public License v3.0"></a>
 </p>
 
@@ -34,6 +34,7 @@ No account, subscription, cloud transcription, or paid API is required.
 - Customizable global push-to-talk shortcut
 - Background operation after the main window is closed
 - Automatic paste into the previously focused application
+- Focus-preserving paste that avoids reactivating an already-focused app or raising its background windows
 - Automatic cleanup of dictated clipboard text shortly after a successful paste
 - Slide-out navigation with a dedicated local history view for the last five transcriptions
 - Dedicated Speech models page with language, installation, and active-model information
@@ -41,6 +42,7 @@ No account, subscription, cloud transcription, or paid API is required.
 - A click-through, voice-responsive rounded-bar waveform with quiet-room noise filtering
 - Bottom-center overlay placement on the monitor containing the focused app
 - Start and stop sound cues
+- A recording-ready start cue that plays only after microphone capture is active, including after a cold background recovery
 - Automatic recovery when another call app temporarily stalls microphone access
 - Automatic replacement of stale or muted microphone tracks after switching between SpeakIt and a call app
 - Delayed microphone recovery that reuses an in-progress request and retains a late successful connection instead of repeatedly restarting it
@@ -71,7 +73,7 @@ Run SpeakIt from Applications rather than directly from the mounted installer. m
 
 1. Click the text field where you want the result.
 2. Hold the configured shortcut.
-3. Begin speaking after the start sound and listening waveform appear.
+3. Begin speaking after the start sound and listening waveform appear. The start sound now confirms that microphone capture is active.
 4. Release the shortcut when finished.
 5. SpeakIt transcribes locally, restores the original app, and pastes the text.
 

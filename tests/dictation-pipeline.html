@@ -20,6 +20,7 @@
       const recorder = {
         needsAcquisition: true,
         async start() {
+          focusEvents.push("recorder-start");
           recorderStarts += 1;
           return 48_000;
         },
@@ -34,7 +35,7 @@
       };
 
       const commands = {
-        async playActivationSound() {},
+        async playActivationSound() { focusEvents.push("chime"); },
         async playStopSound() {},
         async frontmostTarget() {
           targetRequests += 1;
@@ -89,6 +90,9 @@
       );
       document.body.dataset.targetCapturedBeforeWake = String(
         focusEvents[0] === "target-1" && focusEvents[1] === "wake",
+      );
+      document.body.dataset.chimeSignalsReadyRecorder = String(
+        focusEvents.indexOf("recorder-start") < focusEvents.indexOf("chime"),
       );
 
       resolveFirstTranscription("First result.");

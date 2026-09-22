@@ -44,6 +44,11 @@ fn text_for_paste(text: &str) -> String {
     output
 }
 
+#[cfg(test)]
+fn should_activate_target(frontmost_pid: i32, target_pid: i32) -> bool {
+    target_pid > 0 && frontmost_pid != target_pid
+}
+
 #[tauri::command]
 pub(crate) fn paste_text(
     text: String,
@@ -74,17 +79,26 @@ pub(crate) fn paste_text(
     let paste_script = r#"
 on run argv
   set targetPid to (item 1 of argv) as integer
+  set didActivate to false
   tell application "System Events"
     set targetProcess to first application process whose unix id is targetPid
-    set frontmost of targetProcess to true
+    set currentProcess to first application process whose frontmost is true
+    if (unix id of currentProcess) is not targetPid then
+      set frontmost of targetProcess to true
+      set didActivate to true
+    end if
   end tell
-  repeat 20 times
-    tell application "System Events"
-      if frontmost of targetProcess is true then exit repeat
-    end tell
+  if didActivate then
+    repeat 20 times
+      tell application "System Events"
+        if frontmost of targetProcess is true then exit repeat
+      end tell
+      delay 0.025
+    end repeat
+    delay 0.10
+  else
     delay 0.025
-  end repeat
-  delay 0.10
+  end if
   tell application "System Events"
     set targetProcess to first application process whose unix id is targetPid
     key code 9 using {command down}
@@ -98,7 +112,7 @@ on run argv
       end try
     end try
   end tell
-  return focusedRole & "||" & focusedSubrole
+  return focusedRole & "||" & focusedSubrole & "||" & (didActivate as string)
 end run
 "#;
     let pid = target_pid.to_string();
@@ -125,13 +139,14 @@ end run
         });
     }
     let response = String::from_utf8_lossy(&output.stdout);
-    let mut parts = response.trim().splitn(2, "||");
+    let mut parts = response.trim().splitn(3, "||");
     let focused_role = parts.next().unwrap_or("unknown").to_string();
     let focused_subrole = parts.next().unwrap_or_default().to_string();
+    let activated_target = parts.next().unwrap_or("false");
     append_log(
         "paste.complete",
         &format!(
-            "app={app_name} pid={target_pid} role={focused_role} subrole={focused_subrole} helper_ms={}",
+            "app={app_name} pid={target_pid} role={focused_role} subrole={focused_subrole} activated={activated_target} helper_ms={}",
             helper_started.elapsed().as_millis()
         ),
     );
@@ -323,5 +338,12 @@ mod tests {
     fn consecutive_dictation_is_pasted_with_one_separator_space() {
         assert_eq!(text_for_paste("Next sentence."), "Next sentence. ");
         assert_eq!(text_for_paste("Next sentence.   "), "Next sentence. ");
+    }
+
+    #[test]
+    fn already_focused_target_does_not_need_reactivation() {
+        assert!(!should_activate_target(410, 410));
+        assert!(should_activate_target(411, 410));
+        assert!(!should_activate_target(411, 0));
     }
 }

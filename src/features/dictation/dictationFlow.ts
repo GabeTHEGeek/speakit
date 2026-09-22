@@ -62,9 +62,6 @@ export class DictationFlow {
     this.startCanceled = false;
     this.setStatus("starting", "Starting microphone…");
     try {
-      if (microphoneRetry === 0) {
-        void this.commands.playActivationSound().catch((error) => logEvent("sound.start.failed", errorDetails(error)));
-      }
       const shortcut = this.shortcutValue();
       logEvent("recording.start.requested", `shortcut=${shortcut} modelReady=${this.modelReady}`);
       const targetPromise = (requireTextField ? this.commands.frontmostTarget() : this.commands.mainWindowTarget())
@@ -109,6 +106,7 @@ export class DictationFlow {
       this.focusTarget = { appName: target.appName || "your active app", role: "", canPaste: requireTextField };
       logEvent("recording.started", `sampleRate=${sampleRate} target=${this.focusTarget.appName} pid=${this.targetPid} anchorX=${target.anchorX.toFixed(1)} anchorY=${target.anchorY.toFixed(1)}`);
       this.setStatus("recording", this.focusTarget.canPaste ? `Listening for ${this.focusTarget.appName}…` : "Listening…");
+      void this.commands.playActivationSound().catch((error) => logEvent("sound.start.failed", errorDetails(error)));
       if (requireTextField && !this.shortcutHeld()) await this.stop();
       if (!requireTextField && !this.manualButtonHeld) await this.stop();
     } catch (error) {

@@ -3761,7 +3761,7 @@ dependencies = [
 
 [[package]]
 name = "speakit"
-version = "0.2.46"
+version = "0.2.48"
 dependencies = [
  "arboard",
  "core-foundation",
