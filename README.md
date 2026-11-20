@@ -26,7 +26,7 @@ No account, subscription, cloud transcription, or paid API is required.
 
 ## Features
 
-- Canary 180M Flash as the default local engine, supporting English, German, French, and Spanish
+- Canary 180M Flash as the default local engine (the model supports English, German, French, and Spanish; SpeakIt currently transcribes English only, see [Current scope](#current-scope))
 - Optional Whisper `small.en` engine for English dictation
 - Fast on-device transcription optimized for Apple Silicon
 - Conversational punctuation that breaks up common run-on dictation, recognizes likely questions, and preserves punctuation supplied by the speech model
@@ -116,7 +116,11 @@ Use **Run check** in SpeakIt's System diagnostics section to verify the micropho
 
 ## Current scope
 
-SpeakIt currently focuses on English voice-to-text dictation for macOS. Google Calendar integration and local note storage are not included in the current version.
+SpeakIt currently focuses on English voice-to-text dictation for macOS.
+
+- **Languages:** Canary 180M Flash, the default engine, supports English, German, French, and Spanish. SpeakIt does not yet let you choose a language: both the Canary and Whisper engines are set to English, so dictation is transcribed as English whatever language you speak. The Speech models page lists the languages each model supports, not languages you can select today.
+- **English-only formatting:** spoken punctuation commands and conversational punctuation are built for English.
+- **Not included:** Google Calendar integration and local note storage.
 
 ## Creator
 
