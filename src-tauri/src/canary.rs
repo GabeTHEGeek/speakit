@@ -20,6 +20,9 @@ const FILES: [(&str, &str); 4] = [
     ("vocab.txt", "https://huggingface.co/istupakov/canary-180m-flash-onnx/resolve/main/vocab.txt"),
 ];
 static CANARY_MODEL: OnceLock<Mutex<CanaryModel>> = OnceLock::new();
+// Serializes loading so a startup preload and a prepare/transcribe call that
+// arrive together share one load instead of each reading the model from disk.
+static CANARY_LOAD: Mutex<()> = Mutex::new(());
 
 fn model_dir() -> Result<PathBuf, String> {
     let mut path = dirs::data_local_dir().ok_or("Could not find the app data folder")?;
@@ -48,6 +51,12 @@ fn canary_model() -> Result<&'static Mutex<CanaryModel>, String> {
     if let Some(model) = CANARY_MODEL.get() {
         return Ok(model);
     }
+    let _loading = CANARY_LOAD
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(model) = CANARY_MODEL.get() {
+        return Ok(model);
+    }
     let path = model_dir()?;
     if !files_ready(&path) {
         return Err("Canary Flash has not finished downloading".into());
@@ -65,6 +74,11 @@ pub(crate) fn canary_ready() -> Result<bool, String> {
     Ok(files_ready(&model_dir()?))
 }
 
+/// Loads Canary into memory ahead of the first prepare call. Used at launch.
+pub(crate) fn preload() -> Result<(), String> {
+    canary_model().map(|_| ())
+}
+
 #[tauri::command]
 pub(crate) async fn prepare_canary_model() -> Result<(), String> {
     append_log("canary.prepare.start", "");
@@ -73,10 +87,13 @@ pub(crate) async fn prepare_canary_model() -> Result<(), String> {
         .await
         .map_err(|error| error.to_string())?;
     match &result {
-        Ok(()) => append_log(
-            "canary.prepare.complete",
-            &format!("elapsed_ms={}", started.elapsed().as_millis()),
-        ),
+        Ok(()) => {
+            crate::preload::remember_engine(crate::preload::Engine::Canary);
+            append_log(
+                "canary.prepare.complete",
+                &format!("elapsed_ms={}", started.elapsed().as_millis()),
+            )
+        }
         Err(error) => append_log("canary.prepare.failed", error),
     }
     result

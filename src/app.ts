@@ -308,11 +308,7 @@ export function startMainApp(iconUrl: string) {
     window.setTimeout(() => { view.copyDiagnosticsButton.textContent = "Copy"; }, 1200);
   });
 
-  async function initialize() {
-    logEvent("app.initialize", `userAgent=${navigator.userAgent}`);
-    renderShortcut();
-    renderModels();
-    updatePermissionSetup();
+  async function setupPermissions() {
     await refreshAccessibility();
     if (!accessibilityReady) void native.requestAccessibilityPermission();
     try {
@@ -335,11 +331,16 @@ export function startMainApp(iconUrl: string) {
     }
     if (settings.permissionSetupComplete && microphoneReady && accessibilityReady) view.permissionSetup.classList.add("hidden");
     window.setInterval(() => void refreshAccessibility(), 1_200);
+  }
 
+  async function prepareSpeechModel() {
+    const started = performance.now();
     try {
       view.modelState.textContent = "Checking speech model…";
-      whisperInstalled = await native.modelReady();
-      canaryInstalled = await native.canaryReady().catch(() => false);
+      [whisperInstalled, canaryInstalled] = await Promise.all([
+        native.modelReady(),
+        native.canaryReady().catch(() => false),
+      ]);
       modelIsReady = speechEngine === "canary" ? canaryInstalled : whisperInstalled;
       dictation.setModelReady(modelIsReady);
       renderModels();
@@ -350,6 +351,7 @@ export function startMainApp(iconUrl: string) {
         else await native.prepareModel();
         view.modelState.textContent = `${speechEngine === "canary" ? "Canary Flash (experimental)" : "Whisper small.en"} ready`;
         await hotkeys.bind(shortcut);
+        logEvent("app.ready", `engine=${speechEngine} since_page_start_ms=${Math.round(performance.now())} model_ms=${Math.round(performance.now() - started)}`);
       } else {
         configureModelSetup(speechEngine);
         view.modelState.textContent = "Speech model required";
@@ -357,6 +359,16 @@ export function startMainApp(iconUrl: string) {
     } catch (error) {
       view.modelState.textContent = `Setup needed: ${String(error)}`;
     }
+  }
+
+  async function initialize() {
+    logEvent("app.initialize", `userAgent=${navigator.userAgent}`);
+    renderShortcut();
+    renderModels();
+    updatePermissionSetup();
+    // Loading the speech model is the slowest part of launch, so start it right
+    // away instead of after the microphone and accessibility checks finish.
+    await Promise.all([setupPermissions(), prepareSpeechModel()]);
   }
 
   window.addEventListener("beforeunload", () => recorder.dispose());
