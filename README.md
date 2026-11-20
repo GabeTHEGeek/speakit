@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/macOS-13%2B-1f2421?style=flat-square&logo=apple&logoColor=white" alt="macOS 13 or newer">
   <img src="https://img.shields.io/badge/transcription-100%25%20local-ef603f?style=flat-square" alt="100 percent local transcription">
   <img src="https://img.shields.io/badge/cost-free-4a9c68?style=flat-square" alt="Free to use">
-  <img src="https://img.shields.io/badge/release-0.2.48-fb6542?style=flat-square" alt="SpeakIt release 0.2.48">
+  <img src="https://img.shields.io/badge/release-0.2.49-fb6542?style=flat-square" alt="SpeakIt release 0.2.49">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-4468a6?style=flat-square" alt="GNU General Public License v3.0"></a>
 </p>
 
