@@ -1,8 +1,8 @@
 import type { MainView } from "../../ui/mainView";
 import type { ActiveTarget, AppStatus, FocusTarget } from "../../types";
 import { AudioRecorder } from "../../services/audioRecorder";
-import { settings } from "../../services/settings";
-import type { SpeechEngine } from "../../services/settings";
+import { languageForEngine, settings } from "../../services/settings";
+import type { DictationLanguage, SpeechEngine } from "../../services/settings";
 import { errorDetails, logEvent, native } from "../../platform/native";
 
 type CompletedRecording = NonNullable<Awaited<ReturnType<AudioRecorder["stop"]>>>;
@@ -162,9 +162,10 @@ export class DictationFlow {
     const focusTarget = this.focusTarget;
     const targetPid = this.targetPid;
     const engine = this.speechEngine();
+    const language = languageForEngine(engine, settings.dictationLanguage);
     this.focusTarget = null;
     this.targetPid = 0;
-    this.enqueueProcessing(recording, focusTarget, targetPid, engine);
+    this.enqueueProcessing(recording, focusTarget, targetPid, engine, language);
     this.setStatus("ready", this.pendingProcessing === 1 ? "Processing previous dictation…" : `${this.pendingProcessing} dictations processing…`);
   }
 
@@ -173,12 +174,13 @@ export class DictationFlow {
     focusTarget: FocusTarget | null,
     targetPid: number,
     engine: SpeechEngine,
+    language: DictationLanguage,
   ) {
     this.pendingProcessing += 1;
     logEvent("transcription.queued", `pending=${this.pendingProcessing} samples=${recording.downsampled.length}`);
     const process = async () => {
       try {
-        this.lastProcessingMessage = await this.processRecording(recording, focusTarget, targetPid, engine);
+        this.lastProcessingMessage = await this.processRecording(recording, focusTarget, targetPid, engine, language);
       } catch (error) {
         logEvent("transcription.pipeline.failed", errorDetails(error));
         this.lastProcessingMessage = `Dictation failed: ${String(error)}`;
@@ -200,11 +202,12 @@ export class DictationFlow {
     focusTarget: FocusTarget | null,
     targetPid: number,
     engine: SpeechEngine,
+    language: DictationLanguage,
   ) {
     let text: string;
     try {
-      logEvent("transcription.requested", `engine=${engine} samples=${recording.downsampled.length}`);
-      text = await this.commands.transcribe(recording.downsampled, engine);
+      logEvent("transcription.requested", `engine=${engine} language=${language} samples=${recording.downsampled.length}`);
+      text = await this.commands.transcribe(recording.downsampled, engine, language);
       logEvent("transcription.succeeded", `chars=${text.length}`);
     } catch (error) {
       logEvent("transcription.failed", errorDetails(error));

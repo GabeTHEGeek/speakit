@@ -108,14 +108,21 @@ pub(crate) async fn download_model(app: tauri::AppHandle) -> Result<(), String> 
 pub(crate) async fn transcribe(
     samples: Vec<f32>,
     engine: Option<String>,
+    language: Option<String>,
 ) -> Result<String, String> {
     let started = Instant::now();
     let engine = engine.unwrap_or_else(|| "whisper".into());
+    // Whisper small.en is English only, so only Canary honours another language.
+    let language = if engine == "canary" {
+        dictation_language(language.as_deref())
+    } else {
+        "en"
+    };
     let (samples, audio) = level_audio(samples);
     append_log(
         "transcription.native.start",
         &format!(
-            "engine={engine} samples={} threads=4 rms={:.6} peak={:.6} gain={:.2}",
+            "engine={engine} language={language} samples={} threads=4 rms={:.6} peak={:.6} gain={:.2}",
             samples.len(),
             audio.rms,
             audio.peak,
@@ -125,8 +132,13 @@ pub(crate) async fn transcribe(
     let result: Result<String, String> =
         tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
             if engine == "canary" {
-                let canary = crate::canary::transcribe_canary(&samples)?;
-                if !canary.is_empty() || !audio.has_signal || !model_path()?.is_file() {
+                let canary = crate::canary::transcribe_canary(&samples, language)?;
+                // The Whisper fallback is English only, so it cannot help other languages.
+                if !canary.is_empty()
+                    || !audio.has_signal
+                    || language != "en"
+                    || !model_path()?.is_file()
+                {
                     return Ok(canary);
                 }
                 append_log(
@@ -231,7 +243,23 @@ fn transcribe_whisper(samples: &[f32]) -> Result<String, String> {
     Ok(finalize_transcript(&result))
 }
 
+/// Languages Canary 180M Flash can transcribe. Anything else falls back to English.
+pub(crate) fn dictation_language(requested: Option<&str>) -> &'static str {
+    match requested {
+        Some("de") => "de",
+        Some("fr") => "fr",
+        Some("es") => "es",
+        _ => "en",
+    }
+}
+
 pub(crate) fn finalize_transcript(text: &str) -> String {
+    finalize_transcript_in(text, "en")
+}
+
+/// Cleans a transcript. English also gets spoken punctuation commands and
+/// conversational formatting; other languages keep the model's own punctuation.
+pub(crate) fn finalize_transcript_in(text: &str, language: &str) -> String {
     let output = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if output.is_empty() {
         return output;
@@ -269,7 +297,11 @@ pub(crate) fn finalize_transcript(text: &str) -> String {
         );
         return String::new();
     }
-    format_dictation(&output)
+    if language == "en" {
+        format_dictation(&output)
+    } else {
+        output
+    }
 }
 
 fn format_dictation(text: &str) -> String {
@@ -428,6 +460,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unsupported_languages_fall_back_to_english() {
+        assert_eq!(dictation_language(Some("de")), "de");
+        assert_eq!(dictation_language(Some("fr")), "fr");
+        assert_eq!(dictation_language(Some("es")), "es");
+        assert_eq!(dictation_language(Some("it")), "en");
+        assert_eq!(dictation_language(None), "en");
+    }
+
+    #[test]
+    fn other_languages_skip_english_formatting() {
+        assert_eq!(
+            finalize_transcript_in("Wie geht es dir comma heute?", "de"),
+            "Wie geht es dir comma heute?"
+        );
+        assert_eq!(
+            finalize_transcript_in("  bonjour   tout le monde. ", "fr"),
+            "bonjour tout le monde."
+        );
+        assert_eq!(finalize_transcript_in("music", "es"), "");
+    }
+
+    #[test]
     fn transcription_always_has_terminal_punctuation() {
         assert_eq!(
             finalize_transcript("This is a sentence"),
@@ -516,8 +570,9 @@ mod tests {
         let samples = transcribe_rs::audio::read_wav_samples(std::path::Path::new(&audio_path))
             .expect("audio fixture should load");
         let started = Instant::now();
-        let text = tauri::async_runtime::block_on(transcribe(samples, Some("whisper".into())))
-            .expect("Whisper should transcribe the fixture");
+        let text =
+            tauri::async_runtime::block_on(transcribe(samples, Some("whisper".into()), None))
+                .expect("Whisper should transcribe the fixture");
         eprintln!("Whisper fixture: {:?} — {text}", started.elapsed());
         assert!(!text.trim().is_empty());
     }

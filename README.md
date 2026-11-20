@@ -26,11 +26,11 @@ No account, subscription, cloud transcription, or paid API is required.
 
 ## Features
 
-- Canary 180M Flash as the default local engine (the model supports English, German, French, and Spanish; SpeakIt currently transcribes English only, see [Current scope](#current-scope))
+- Canary 180M Flash as the default local engine, with a dictation language picker for English, German, French, and Spanish
 - Optional Whisper `small.en` engine for English dictation
 - Fast on-device transcription optimized for Apple Silicon
 - Conversational punctuation that breaks up common run-on dictation, recognizes likely questions, and preserves punctuation supplied by the speech model
-- Spoken punctuation commands including “comma,” “period,” “question mark,” “new line,” and “new paragraph”
+- Spoken punctuation commands including “comma,” “period,” “question mark,” “new line,” and “new paragraph” (English)
 - Customizable global push-to-talk shortcut
 - Background operation after the main window is closed
 - Automatic paste into the previously focused application
@@ -87,7 +87,7 @@ Closing the SpeakIt window keeps dictation active in the background. Click the S
 
 Open the menu at the top left and choose **History** to see your newest five transcriptions. Use **Copy** to put an entry back on the clipboard or **Delete** to remove it from local history. Older entries are replaced automatically. Audio recordings are not saved.
 
-Canary 180M Flash is the default speech engine. Open the top-left menu and choose **Speech models** to install or switch models and see their supported languages. Transcription timing and the selected engine are recorded in the local diagnostics log.
+Canary 180M Flash is the default speech engine. Open the top-left menu and choose **Speech models** to install or switch models, see their supported languages, and choose your **Dictation language** (English, German, French, or Spanish). The language applies to Canary Flash; Whisper small.en always transcribes English. Transcription timing and the selected engine are recorded in the local diagnostics log.
 
 After automatic paste, SpeakIt clears its dictated text from the clipboard after a short delay. Different content copied in the meantime is left alone. If the paste helper fails, clipboard cleanup is skipped so you can paste manually. Copying an entry manually from history keeps it on the clipboard until you replace it.
 
@@ -116,10 +116,10 @@ Use **Run check** in SpeakIt's System diagnostics section to verify the micropho
 
 ## Current scope
 
-SpeakIt currently focuses on English voice-to-text dictation for macOS.
+SpeakIt is a voice-to-text dictation app for macOS.
 
-- **Languages:** Canary 180M Flash, the default engine, supports English, German, French, and Spanish. SpeakIt does not yet let you choose a language: both the Canary and Whisper engines are set to English, so dictation is transcribed as English whatever language you speak. The Speech models page lists the languages each model supports, not languages you can select today.
-- **English-only formatting:** spoken punctuation commands and conversational punctuation are built for English.
+- **Languages:** with Canary 180M Flash, the default engine, you can dictate in English, German, French, or Spanish. Choose the language under **Speech models → Dictation language**; it defaults to English. Whisper small.en is English only, so it ignores this setting. SpeakIt transcribes in the chosen language and does not translate.
+- **English-only formatting:** spoken punctuation commands (such as “comma” and “new line”) and conversational punctuation only apply to English. In German, French, and Spanish, SpeakIt keeps the punctuation Canary Flash produces.
 - **Not included:** Google Calendar integration and local note storage.
 
 ## Creator

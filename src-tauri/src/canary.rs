@@ -11,7 +11,7 @@ use transcribe_rs::onnx::{
     Quantization,
 };
 
-use crate::{logging::append_log, speech::finalize_transcript};
+use crate::{logging::append_log, speech::finalize_transcript_in};
 
 const FILES: [(&str, &str); 4] = [
     ("nemo128.onnx", "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/nemo128.onnx"),
@@ -144,7 +144,7 @@ async fn download_file(
     Ok(())
 }
 
-pub(crate) fn transcribe_canary(samples: &[f32]) -> Result<String, String> {
+pub(crate) fn transcribe_canary(samples: &[f32], language: &str) -> Result<String, String> {
     let model = canary_model()?;
     let mut guard = model
         .lock()
@@ -153,14 +153,15 @@ pub(crate) fn transcribe_canary(samples: &[f32]) -> Result<String, String> {
         .transcribe_with(
             samples,
             &CanaryParams {
-                language: Some("en".into()),
-                target_language: Some("en".into()),
+                // Same source and target language: transcribe, never translate.
+                language: Some(language.into()),
+                target_language: Some(language.into()),
                 use_pnc: true,
                 ..Default::default()
             },
         )
         .map_err(|error| format!("Canary transcription failed: {error}"))?;
-    Ok(finalize_transcript(&result.text))
+    Ok(finalize_transcript_in(&result.text, language))
 }
 
 #[cfg(test)]

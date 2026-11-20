@@ -67,6 +67,15 @@ export function renderMainView(iconUrl: string) {
             <div class="model-actions"><small id="whisper-state">Checking…</small><button id="select-whisper" type="button">Select</button><button id="download-whisper" class="hidden" type="button">Download · 466 MB</button></div>
           </article>
         </div>
+        <section class="settings-card language-card">
+          <div><strong>Dictation language</strong><span id="language-note">Canary Flash transcribes in this language. Whisper small.en is English only.</span></div>
+          <select id="dictation-language" class="language-select" aria-label="Dictation language">
+            <option value="en">English</option>
+            <option value="de">German</option>
+            <option value="fr">French</option>
+            <option value="es">Spanish</option>
+          </select>
+        </section>
         <p class="model-note">Only one model is active at a time. Downloaded models remain available offline.</p>
       </section>
       <footer><span>No cloud. No account. No subscription.</span><span id="model-state">Checking speech model…</span></footer>
@@ -143,6 +152,7 @@ export function renderMainView(iconUrl: string) {
     downloadCanary: element<HTMLButtonElement>("#download-canary"),
     downloadWhisper: element<HTMLButtonElement>("#download-whisper"),
     modelSetupCopy: element<HTMLParagraphElement>("#model-setup-copy"),
+    languageSelect: element<HTMLSelectElement>("#dictation-language"),
   };
 }
 
