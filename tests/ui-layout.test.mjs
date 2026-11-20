@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,13 +8,45 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
-const chromePath = process.env.SPEAKIT_TEST_BROWSER || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+
+// Looks for Chrome or Chromium in the usual install locations and on PATH.
+// SPEAKIT_TEST_BROWSER overrides the search with an exact executable path.
+function findBrowser() {
+  if (process.env.SPEAKIT_TEST_BROWSER) return process.env.SPEAKIT_TEST_BROWSER;
+  const macApps = [
+    "Google Chrome.app/Contents/MacOS/Google Chrome",
+    "Chromium.app/Contents/MacOS/Chromium",
+    "Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+    "Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+  ];
+  const candidates = [
+    ...macApps.map((app) => path.join("/Applications", app)),
+    ...macApps.map((app) => path.join(os.homedir(), "Applications", app)),
+  ];
+  const names = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome"];
+  for (const dir of (process.env.PATH || "").split(path.delimiter).filter(Boolean)) {
+    for (const name of names) candidates.push(path.join(dir, name));
+  }
+  candidates.push("/snap/bin/chromium");
+  if (process.platform === "win32") {
+    for (const base of [process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter(Boolean)) {
+      candidates.push(path.join(base, "Google/Chrome/Application/chrome.exe"), path.join(base, "Chromium/Application/chrome.exe"));
+    }
+  }
+  return candidates.find((candidate) => statSync(candidate, { throwIfNoEntry: false })?.isFile());
+}
+
+const chromePath = findBrowser();
 
 function waitForServer(server) {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Timed out starting the UI test server")), 10_000);
+    let output = "";
+    const timeout = setTimeout(() => reject(new Error(`Timed out starting the UI test server. ${output}`)), 10_000);
     const ready = (chunk) => {
-      if (!chunk.toString().includes("Local:")) return;
+      // Vite colors its output when it detects CI (e.g. GitHub Actions), which
+      // splits "Local:" with escape codes, so strip them before matching.
+      output += chunk.toString().replace(/\x1b\[[0-9;]*m/g, "");
+      if (!output.includes("Local:")) return;
       clearTimeout(timeout);
       resolve();
     };
@@ -131,7 +164,12 @@ async function readAudioRecovery(debuggerClient) {
   throw new Error("The delayed microphone recovery regression did not finish");
 }
 
-test("real browser regressions cover the home layout and rapid-repeat dictation", { timeout: 30_000 }, async () => {
+const browserSkip = chromePath || process.env.CI
+  ? false
+  : "no Chrome or Chromium found; set SPEAKIT_TEST_BROWSER to its executable path";
+
+test("real browser regressions cover the home layout and rapid-repeat dictation", { timeout: 30_000, skip: browserSkip }, async () => {
+  assert.ok(chromePath, "No Chrome or Chromium found. Set SPEAKIT_TEST_BROWSER to its executable path.");
   const profile = await mkdtemp(path.join(os.tmpdir(), "speakit-layout-"));
   const server = spawn(path.join(projectRoot, "node_modules/.bin/vite"), ["--host", "127.0.0.1", "--port", "4178", "--strictPort"], {
     cwd: projectRoot,
@@ -194,8 +232,12 @@ test("real browser regressions cover the home layout and rapid-repeat dictation"
     });
   } finally {
     debuggerClient?.close();
-    if (browser?.exitCode === null) browser.kill("SIGKILL");
+    if (browser && browser.exitCode === null && browser.signalCode === null) {
+      const exited = new Promise((resolve) => browser.once("exit", resolve));
+      browser.kill("SIGKILL");
+      await exited;
+    }
     server.kill("SIGTERM");
-    await rm(profile, { recursive: true, force: true });
+    await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });

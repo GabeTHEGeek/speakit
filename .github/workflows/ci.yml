@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: JS tests
+        run: npm test
+
+      # Tauri embeds the built frontend at compile time, so dist/ must exist
+      # before the Rust crate can compile.
+      - name: Build frontend
+        run: npm run build
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # One Rust test loads the real Whisper model the app downloads on first
+      # launch. Fetch it into the app's data folder once and cache it.
+      - name: Cache Whisper model
+        id: whisper-model
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Application Support/SpeakIt/models/ggml-small.en.bin
+          key: whisper-ggml-small.en-v1
+
+      - name: Download Whisper model
+        if: steps.whisper-model.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$HOME/Library/Application Support/SpeakIt/models"
+          curl -fL --retry 3 -o "$HOME/Library/Application Support/SpeakIt/models/ggml-small.en.bin" \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin
+
+      - name: Rust tests
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
