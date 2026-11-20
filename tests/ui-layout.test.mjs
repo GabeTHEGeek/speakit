@@ -40,9 +40,13 @@ const chromePath = findBrowser();
 
 function waitForServer(server) {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Timed out starting the UI test server")), 10_000);
+    let output = "";
+    const timeout = setTimeout(() => reject(new Error(`Timed out starting the UI test server. ${output}`)), 10_000);
     const ready = (chunk) => {
-      if (!chunk.toString().includes("Local:")) return;
+      // Vite colors its output when it detects CI (e.g. GitHub Actions), which
+      // splits "Local:" with escape codes, so strip them before matching.
+      output += chunk.toString().replace(/\x1b\[[0-9;]*m/g, "");
+      if (!output.includes("Local:")) return;
       clearTimeout(timeout);
       resolve();
     };
