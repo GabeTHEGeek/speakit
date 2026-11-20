@@ -5,6 +5,7 @@ mod insertion;
 mod logging;
 mod overlay;
 mod permissions;
+mod preload;
 mod process;
 mod speech;
 mod window_lifecycle;
@@ -27,6 +28,12 @@ use window_lifecycle::{
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .setup(|_app| {
+            // Start reading the speech model from disk while the webview boots,
+            // so it is usually ready by the time the UI asks for it.
+            preload::start();
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {

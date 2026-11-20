@@ -1,5 +1,9 @@
 use futures_util::StreamExt;
-use std::{path::PathBuf, sync::OnceLock, time::Instant};
+use std::{
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+    time::Instant,
+};
 use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
@@ -9,6 +13,9 @@ use crate::logging::append_log;
 const MODEL_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin";
 static WHISPER_CONTEXT: OnceLock<WhisperContext> = OnceLock::new();
+// Serializes loading so a startup preload and a prepare/transcribe call that
+// arrive together share one load instead of each reading the model from disk.
+static WHISPER_LOAD: Mutex<()> = Mutex::new(());
 
 pub(crate) fn model_path() -> Result<PathBuf, String> {
     let mut path = dirs::data_local_dir().ok_or("Could not find the app data folder")?;
@@ -19,6 +26,12 @@ pub(crate) fn model_path() -> Result<PathBuf, String> {
 }
 
 fn whisper_context() -> Result<&'static WhisperContext, String> {
+    if let Some(context) = WHISPER_CONTEXT.get() {
+        return Ok(context);
+    }
+    let _loading = WHISPER_LOAD
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some(context) = WHISPER_CONTEXT.get() {
         return Ok(context);
     }
@@ -42,6 +55,11 @@ pub(crate) fn model_ready() -> Result<bool, String> {
     Ok(model_path()?.is_file())
 }
 
+/// Loads Whisper into memory ahead of the first prepare call. Used at launch.
+pub(crate) fn preload() -> Result<(), String> {
+    whisper_context().map(|_| ())
+}
+
 #[tauri::command]
 pub(crate) async fn prepare_model() -> Result<(), String> {
     append_log("model.prepare.start", "");
@@ -50,10 +68,13 @@ pub(crate) async fn prepare_model() -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
     match &result {
-        Ok(()) => append_log(
-            "model.prepare.complete",
-            &format!("elapsed_ms={}", started.elapsed().as_millis()),
-        ),
+        Ok(()) => {
+            crate::preload::remember_engine(crate::preload::Engine::Whisper);
+            append_log(
+                "model.prepare.complete",
+                &format!("elapsed_ms={}", started.elapsed().as_millis()),
+            )
+        }
         Err(error) => append_log("model.prepare.failed", error),
     }
     result
