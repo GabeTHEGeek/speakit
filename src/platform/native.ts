@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ActiveTarget, DiagnosticReport, PasteResult } from "../types";
-import type { SpeechEngine } from "../services/settings";
+import type { DictationLanguage, SpeechEngine } from "../services/settings";
 
 export function errorDetails(error: unknown) {
   if (error instanceof DOMException) return `${error.name}: ${error.message}`;
@@ -31,7 +31,8 @@ export const native = {
   prepareCanaryModel: () => invoke("prepare_canary_model"),
   requestAccessibilityPermission: () => invoke("request_accessibility_permission"),
   showOverlay: (anchorX: number, anchorY: number) => invoke("show_overlay", { anchorX, anchorY }),
-  transcribe: (samples: Float32Array, engine: SpeechEngine) => invoke<string>("transcribe", { samples: Array.from(samples), engine }),
+  transcribe: (samples: Float32Array, engine: SpeechEngine, language: DictationLanguage) =>
+    invoke<string>("transcribe", { samples: Array.from(samples), engine, language }),
   wakeAudioHost: () => invoke<boolean>("wake_audio_host"),
   releaseAudioHost: (targetPid: number) => invoke("release_audio_host", { targetPid }),
 };

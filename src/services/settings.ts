@@ -6,15 +6,40 @@ const keys = {
   overlayY: "lastOverlayAnchorY",
   speechEngine: "speechEngine",
   canaryDefaultApplied: "canaryDefaultAppliedV1",
+  dictationLanguage: "dictationLanguage",
 } as const;
 
 export type SpeechEngine = "whisper" | "canary";
+export type DictationLanguage = "en" | "de" | "fr" | "es";
+
+export const dictationLanguages: ReadonlyArray<{ code: DictationLanguage; label: string }> = [
+  { code: "en", label: "English" },
+  { code: "de", label: "German" },
+  { code: "fr", label: "French" },
+  { code: "es", label: "Spanish" },
+];
+
+export function isDictationLanguage(value: unknown): value is DictationLanguage {
+  return dictationLanguages.some((language) => language.code === value);
+}
+
+/** Whisper small.en only understands English, so only Canary uses the chosen language. */
+export function languageForEngine(engine: SpeechEngine, language: DictationLanguage): DictationLanguage {
+  return engine === "canary" ? language : "en";
+}
 
 export const settings = {
   get shortcut() { return localStorage.getItem(keys.shortcut) || "CommandOrControl+Shift+Space"; },
   set shortcut(value: string) { localStorage.setItem(keys.shortcut, value); },
   get speechEngine(): SpeechEngine { return localStorage.getItem(keys.speechEngine) === "whisper" ? "whisper" : "canary"; },
   set speechEngine(value: SpeechEngine) { localStorage.setItem(keys.speechEngine, value); },
+  get dictationLanguage(): DictationLanguage {
+    const value = localStorage.getItem(keys.dictationLanguage);
+    return isDictationLanguage(value) ? value : "en";
+  },
+  set dictationLanguage(value: DictationLanguage) {
+    if (isDictationLanguage(value)) localStorage.setItem(keys.dictationLanguage, value);
+  },
   get canaryDefaultApplied() { return localStorage.getItem(keys.canaryDefaultApplied) === "true"; },
   set canaryDefaultApplied(value: boolean) { localStorage.setItem(keys.canaryDefaultApplied, String(value)); },
   get microphoneReady() { return localStorage.getItem(keys.microphoneReady) === "true"; },
