@@ -1,11 +1,13 @@
 import { listen } from "@tauri-apps/api/event";
 import type { Window } from "@tauri-apps/api/window";
+import { previewTail } from "../features/dictation/livePreview";
 
 export function renderOverlay(currentWindow: Window) {
   document.documentElement.className = "overlay-html";
   document.body.className = "overlay-body";
   document.body.dataset.visible = "false";
   document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
+    <p class="live-transcript" aria-live="polite"></p>
     <div class="voice-cube">
       <div class="waveform" aria-label="Live microphone level">
         ${Array.from({ length: 33 }, (_, index) => `<i style="--i:${index}"></i>`).join("")}
@@ -14,6 +16,11 @@ export function renderOverlay(currentWindow: Window) {
     </div>`;
 
   const bars = [...document.querySelectorAll<HTMLElement>(".waveform i")];
+  const transcript = document.querySelector<HTMLParagraphElement>(".live-transcript")!;
+  const showTranscript = (text: string) => {
+    transcript.textContent = previewTail(text);
+    transcript.classList.toggle("has-text", transcript.textContent !== "");
+  };
   let level = 0;
   let overlayVisible = false;
   let animationFrame: number | null = null;
@@ -21,8 +28,10 @@ export function renderOverlay(currentWindow: Window) {
   void listen<number>("waveform-level", (event) => {
     level = Math.max(0, Math.min(1, event.payload));
   });
+  void listen<string>("overlay-transcript", (event) => showTranscript(event.payload));
   void listen<boolean>("overlay-visibility", (event) => {
     overlayVisible = event.payload;
+    if (!overlayVisible) showTranscript("");
     document.body.dataset.visible = String(overlayVisible);
     if (overlayVisible && animationFrame === null) animationFrame = requestAnimationFrame(animate);
     if (!overlayVisible && animationFrame !== null) {

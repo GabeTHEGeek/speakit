@@ -76,6 +76,10 @@ export function renderMainView(iconUrl: string) {
             <option value="es">Spanish</option>
           </select>
         </section>
+        <section class="settings-card live-preview-card">
+          <div><strong>Live preview</strong><span>Show words in the listening bar while you talk. Canary Flash only.</span></div>
+          <input id="live-preview" class="live-preview-toggle" type="checkbox" role="switch" aria-label="Live preview">
+        </section>
         <p class="model-note">Only one model is active at a time. Downloaded models remain available offline.</p>
       </section>
       <footer><span>No cloud. No account. No subscription.</span><span id="model-state">Checking speech model…</span></footer>
@@ -153,6 +157,7 @@ export function renderMainView(iconUrl: string) {
     downloadWhisper: element<HTMLButtonElement>("#download-whisper"),
     modelSetupCopy: element<HTMLParagraphElement>("#model-setup-copy"),
     languageSelect: element<HTMLSelectElement>("#dictation-language"),
+    livePreviewToggle: element<HTMLInputElement>("#live-preview"),
   };
 }
 

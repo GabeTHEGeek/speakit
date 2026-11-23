@@ -1,9 +1,10 @@
 import type { MainView } from "../../ui/mainView";
 import type { ActiveTarget, AppStatus, FocusTarget } from "../../types";
 import { AudioRecorder } from "../../services/audioRecorder";
-import { languageForEngine, settings } from "../../services/settings";
+import { languageForEngine, livePreviewAvailable, settings } from "../../services/settings";
 import type { DictationLanguage, SpeechEngine } from "../../services/settings";
 import { errorDetails, logEvent, native } from "../../platform/native";
+import { LivePreview } from "./livePreview";
 
 type CompletedRecording = NonNullable<Awaited<ReturnType<AudioRecorder["stop"]>>>;
 
@@ -18,6 +19,7 @@ export class DictationFlow {
   private processingQueue: Promise<void> = Promise.resolve();
   private pendingProcessing = 0;
   private lastProcessingMessage = "Focus a text box, then hold the shortcut";
+  private preview: LivePreview;
 
   constructor(
     private view: MainView,
@@ -27,7 +29,18 @@ export class DictationFlow {
     private speechEngine: () => SpeechEngine,
     private onTranscript: (text: string) => void,
     private commands: typeof native = native,
-  ) {}
+    private previewEnabled: () => boolean = () => settings.livePreview,
+  ) {
+    this.preview = new LivePreview({
+      snapshot: (maxSamples) => this.recorder.snapshot?.(maxSamples) ?? null,
+      transcribe: (samples) => {
+        const engine = this.speechEngine();
+        return this.commands.transcribePreview(samples, engine, languageForEngine(engine, settings.dictationLanguage));
+      },
+      show: (text) => { void this.commands.showPreviewText?.(text)?.catch(() => undefined); },
+      log: logEvent,
+    });
+  }
 
   get isReady() { return this.status === "ready"; }
   setModelReady(value: boolean) { this.modelReady = value; }
@@ -107,6 +120,9 @@ export class DictationFlow {
       logEvent("recording.started", `sampleRate=${sampleRate} target=${this.focusTarget.appName} pid=${this.targetPid} anchorX=${target.anchorX.toFixed(1)} anchorY=${target.anchorY.toFixed(1)}`);
       this.setStatus("recording", this.focusTarget.canPaste ? `Listening for ${this.focusTarget.appName}…` : "Listening…");
       void this.commands.playActivationSound().catch((error) => logEvent("sound.start.failed", errorDetails(error)));
+      if (this.previewEnabled() && livePreviewAvailable(this.speechEngine())) {
+        this.preview.start();
+      }
       if (requireTextField && !this.shortcutHeld()) await this.stop();
       if (!requireTextField && !this.manualButtonHeld) await this.stop();
     } catch (error) {
@@ -149,6 +165,7 @@ export class DictationFlow {
       return;
     }
     if (this.status !== "recording") return;
+    this.preview.stop();
     this.setStatus("transcribing", "Turning speech into text…");
     void this.commands.playStopSound().catch((error) => logEvent("sound.stop.failed", errorDetails(error)));
     await this.commands.hideOverlay();

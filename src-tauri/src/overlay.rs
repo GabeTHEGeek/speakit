@@ -67,8 +67,9 @@ fn centered_overlay_position(
     work_width: f64,
     work_height: f64,
 ) -> (f64, f64) {
-    const OVERLAY_WIDTH: f64 = 258.0;
-    const OVERLAY_HEIGHT: f64 = 62.0;
+    // Wide enough for two lines of live transcript above the waveform bar.
+    const OVERLAY_WIDTH: f64 = 440.0;
+    const OVERLAY_HEIGHT: f64 = 112.0;
     const BOTTOM_MARGIN: f64 = 20.0;
     (
         work_x + (work_width - OVERLAY_WIDTH) / 2.0,
@@ -133,7 +134,7 @@ mod tests {
     #[test]
     fn overlay_is_bottom_centered_on_a_monitor_left_of_primary() {
         let (x, y) = centered_overlay_position(-1920.0, 0.0, 1920.0, 1080.0);
-        assert_eq!(x, -1089.0);
-        assert_eq!(y, 998.0);
+        assert_eq!(x, -1180.0);
+        assert_eq!(y, 948.0);
     }
 }

@@ -17,7 +17,7 @@ use insertion::{focused_text_target, frontmost_app, frontmost_target, paste_text
 use logging::{append_log, log_event};
 use overlay::{hide_overlay, main_window_target, show_overlay};
 use permissions::{accessibility_ready, app_install_location, request_accessibility_permission};
-use speech::{download_model, model_ready, prepare_model, transcribe};
+use speech::{download_model, model_ready, prepare_model, transcribe, transcribe_preview};
 use tauri::Manager;
 use window_lifecycle::{
     main_window_is_parked, park_main_window, release_audio_host, restore_main_window,
@@ -50,6 +50,7 @@ pub fn run() {
             prepare_model,
             download_model,
             transcribe,
+            transcribe_preview,
             canary_ready,
             download_canary_model,
             prepare_canary_model,

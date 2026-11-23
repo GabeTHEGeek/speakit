@@ -7,6 +7,7 @@ const keys = {
   speechEngine: "speechEngine",
   canaryDefaultApplied: "canaryDefaultAppliedV1",
   dictationLanguage: "dictationLanguage",
+  livePreview: "livePreview",
 } as const;
 
 export type SpeechEngine = "whisper" | "canary";
@@ -28,6 +29,11 @@ export function languageForEngine(engine: SpeechEngine, language: DictationLangu
   return engine === "canary" ? language : "en";
 }
 
+/** Live preview re-transcribes while recording, so it needs the fast Canary engine. */
+export function livePreviewAvailable(engine: SpeechEngine) {
+  return engine === "canary";
+}
+
 export const settings = {
   get shortcut() { return localStorage.getItem(keys.shortcut) || "CommandOrControl+Shift+Space"; },
   set shortcut(value: string) { localStorage.setItem(keys.shortcut, value); },
@@ -40,6 +46,9 @@ export const settings = {
   set dictationLanguage(value: DictationLanguage) {
     if (isDictationLanguage(value)) localStorage.setItem(keys.dictationLanguage, value);
   },
+  /** Show words in the listening bar while recording. On unless turned off. */
+  get livePreview() { return localStorage.getItem(keys.livePreview) !== "false"; },
+  set livePreview(value: boolean) { localStorage.setItem(keys.livePreview, String(value)); },
   get canaryDefaultApplied() { return localStorage.getItem(keys.canaryDefaultApplied) === "true"; },
   set canaryDefaultApplied(value: boolean) { localStorage.setItem(keys.canaryDefaultApplied, String(value)); },
   get microphoneReady() { return localStorage.getItem(keys.microphoneReady) === "true"; },

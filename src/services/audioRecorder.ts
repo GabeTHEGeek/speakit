@@ -127,6 +127,25 @@ export class AudioRecorder {
     return this.audioContext.sampleRate;
   }
 
+  /**
+   * The newest audio recorded so far, at 16 kHz, without stopping the
+   * recording. Only the last `maxSamples` (16 kHz) samples are returned.
+   */
+  snapshot(maxSamples: number) {
+    if (!this.audioContext) return null;
+    const inputRate = this.audioContext.sampleRate;
+    const wantedInput = Math.ceil(maxSamples * (inputRate / 16000));
+    const tail: Float32Array[] = [];
+    let collected = 0;
+    for (let index = this.samples.length - 1; index >= 0 && collected < wantedInput; index--) {
+      tail.unshift(this.samples[index]);
+      collected += this.samples[index].length;
+    }
+    const merged = mergeSamples(tail);
+    const trimmed = merged.length > wantedInput ? merged.subarray(merged.length - wantedInput) : merged;
+    return downsample(trimmed, inputRate, 16000);
+  }
+
   cancelPendingStart() {
     this.startAttempt += 1;
   }
