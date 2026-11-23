@@ -58,22 +58,28 @@ export class LivePreview {
 
   private async loop(generation: number) {
     const wait = this.deps.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-    const intervalMs = this.deps.intervalMs ?? 450;
-    const minSamples = this.deps.minSamples ?? Math.round(SAMPLE_RATE * 0.6);
-    const maxSamples = this.deps.maxSamples ?? SAMPLE_RATE * 20;
-    const minNewSamples = this.deps.minNewSamples ?? Math.round(SAMPLE_RATE * 0.25);
+    const intervalMs = this.deps.intervalMs ?? 250;
+    const minSamples = this.deps.minSamples ?? Math.round(SAMPLE_RATE * 0.4);
+    // The overlay only shows the last few lines, so a shorter window keeps
+    // each pass fast without hiding anything the user can see.
+    const maxSamples = this.deps.maxSamples ?? SAMPLE_RATE * 12;
+    const minNewSamples = this.deps.minNewSamples ?? Math.round(SAMPLE_RATE * 0.2);
     let lastLength = 0;
+    let lastTick = Date.now();
     let lastShown = "";
     let passes = 0;
     while (generation === this.generation) {
-      await wait(intervalMs);
+      // Ticks are paced from when the previous one started, not from when its
+      // pass finished, so a slow pass is followed straight away by the next.
+      await wait(Math.max(0, intervalMs - (Date.now() - lastTick)));
       if (generation !== this.generation) return;
+      lastTick = Date.now();
       const samples = this.deps.snapshot(maxSamples);
       if (!samples) return;
       if (samples.length < minSamples) continue;
       if (samples.length < maxSamples && samples.length - lastLength < minNewSamples) continue;
       lastLength = samples.length;
-      const started = Date.now();
+      const started = lastTick;
       const text = await this.deps.transcribe(samples).catch((error) => {
         this.deps.log?.("preview.pass.failed", String(error));
         return null;
@@ -93,7 +99,7 @@ export class LivePreview {
 }
 
 /** Keeps the end of a long preview so the newest words stay visible. */
-export function previewTail(text: string, maxChars = 120) {
+export function previewTail(text: string, maxChars = 240) {
   const trimmed = text.trim();
   if (trimmed.length <= maxChars) return trimmed;
   const tail = trimmed.slice(-maxChars);

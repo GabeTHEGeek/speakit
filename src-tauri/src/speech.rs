@@ -186,18 +186,32 @@ pub(crate) async fn transcribe(
 }
 
 /// Rough transcript of the audio recorded so far, shown while the user is
-/// still speaking. Only Canary Flash is fast enough to re-run every half
+/// still speaking. Only Canary Flash is fast enough to re-run several times a
 /// second; other engines return `None`, as does a busy model.
+///
+/// The audio arrives as raw little-endian f32 bytes rather than a JSON array,
+/// which keeps each pass from spending most of its time encoding numbers.
+/// Engine and language come in the `speakit-engine` and `speakit-language`
+/// headers.
 #[tauri::command]
 pub(crate) async fn transcribe_preview(
-    samples: Vec<f32>,
-    engine: Option<String>,
-    language: Option<String>,
+    request: tauri::ipc::Request<'_>,
 ) -> Result<Option<String>, String> {
-    if engine.as_deref() != Some("canary") {
+    let header = |name: &str| {
+        request
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+    };
+    if header("speakit-engine").as_deref() != Some("canary") {
         return Ok(None);
     }
-    let language = dictation_language(language.as_deref());
+    let language = dictation_language(header("speakit-language").as_deref());
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Preview audio must be sent as raw bytes".into());
+    };
+    let samples = samples_from_le_bytes(bytes);
     let (samples, audio) = level_audio(samples);
     if !audio.has_signal {
         return Ok(None);
@@ -207,6 +221,13 @@ pub(crate) async fn transcribe_preview(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+fn samples_from_le_bytes(bytes: &[u8]) -> Vec<f32> {
+    bytes
+        .chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect()
 }
 
 #[derive(Clone, Copy)]
@@ -503,6 +524,14 @@ fn finish_sentence(output: &mut String, question: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_audio_bytes_decode_to_samples() {
+        let samples = [0.0f32, -0.5, 0.25, 1.0];
+        let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+        assert_eq!(samples_from_le_bytes(&bytes), samples);
+        assert!(samples_from_le_bytes(&bytes[..3]).is_empty());
+    }
 
     #[test]
     fn unsupported_languages_fall_back_to_english() {

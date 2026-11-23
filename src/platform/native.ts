@@ -34,8 +34,14 @@ export const native = {
   showOverlay: (anchorX: number, anchorY: number) => invoke("show_overlay", { anchorX, anchorY }),
   transcribe: (samples: Float32Array, engine: SpeechEngine, language: DictationLanguage) =>
     invoke<string>("transcribe", { samples: Array.from(samples), engine, language }),
+  // Raw bytes instead of a JSON number array: far less to encode and parse on
+  // every preview pass. Float32Array is little-endian on Apple Silicon.
   transcribePreview: (samples: Float32Array, engine: SpeechEngine, language: DictationLanguage) =>
-    invoke<string | null>("transcribe_preview", { samples: Array.from(samples), engine, language }),
+    invoke<string | null>(
+      "transcribe_preview",
+      new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength),
+      { headers: { "speakit-engine": engine, "speakit-language": language } },
+    ),
   showPreviewText: (text: string) => emitTo("overlay", "overlay-transcript", text),
   wakeAudioHost: () => invoke<boolean>("wake_audio_host"),
   releaseAudioHost: (targetPid: number) => invoke("release_audio_host", { targetPid }),

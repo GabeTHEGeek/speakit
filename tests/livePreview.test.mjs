@@ -148,3 +148,31 @@ test("an empty pass keeps the last words on screen instead of blanking them", as
   preview.stop();
   assert.deepEqual(shown, ["", "Hello there", "Hello there friend", ""]);
 });
+
+test("a slow pass is followed by the next one without an extra wait", async () => {
+  const waits = [];
+  let now = 1_000;
+  const realNow = Date.now;
+  Date.now = () => now;
+  try {
+    let passes = 0;
+    let preview;
+    preview = new LivePreview({
+      snapshot: () => new Float32Array(16_000 * (passes + 1)),
+      transcribe: async () => {
+        passes += 1;
+        now += passes === 1 ? 600 : 50;
+        if (passes === 2) preview.stop();
+        return "words";
+      },
+      show: () => {},
+      wait: async (ms) => { waits.push(ms); },
+      intervalMs: 250,
+    });
+    preview.start();
+    for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+  } finally {
+    Date.now = realNow;
+  }
+  assert.deepEqual(waits, [250, 0]);
+});
