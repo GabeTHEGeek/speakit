@@ -185,6 +185,30 @@ pub(crate) async fn transcribe(
     result
 }
 
+/// Rough transcript of the audio recorded so far, shown while the user is
+/// still speaking. Only Canary Flash is fast enough to re-run every half
+/// second; other engines return `None`, as does a busy model.
+#[tauri::command]
+pub(crate) async fn transcribe_preview(
+    samples: Vec<f32>,
+    engine: Option<String>,
+    language: Option<String>,
+) -> Result<Option<String>, String> {
+    if engine.as_deref() != Some("canary") {
+        return Ok(None);
+    }
+    let language = dictation_language(language.as_deref());
+    let (samples, audio) = level_audio(samples);
+    if !audio.has_signal {
+        return Ok(None);
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::canary::try_transcribe_canary(&samples, language)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(Clone, Copy)]
 struct AudioLevel {
     rms: f32,

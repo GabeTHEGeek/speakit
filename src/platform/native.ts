@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { emitTo } from "@tauri-apps/api/event";
 import type { ActiveTarget, DiagnosticReport, PasteResult } from "../types";
 import type { DictationLanguage, SpeechEngine } from "../services/settings";
 
@@ -33,6 +34,9 @@ export const native = {
   showOverlay: (anchorX: number, anchorY: number) => invoke("show_overlay", { anchorX, anchorY }),
   transcribe: (samples: Float32Array, engine: SpeechEngine, language: DictationLanguage) =>
     invoke<string>("transcribe", { samples: Array.from(samples), engine, language }),
+  transcribePreview: (samples: Float32Array, engine: SpeechEngine, language: DictationLanguage) =>
+    invoke<string | null>("transcribe_preview", { samples: Array.from(samples), engine, language }),
+  showPreviewText: (text: string) => emitTo("overlay", "overlay-transcript", text),
   wakeAudioHost: () => invoke<boolean>("wake_audio_host"),
   releaseAudioHost: (targetPid: number) => invoke("release_audio_host", { targetPid }),
 };

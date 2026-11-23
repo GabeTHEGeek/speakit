@@ -166,7 +166,31 @@ pub(crate) fn transcribe_canary(samples: &[f32], language: &str) -> Result<Strin
     let mut guard = model
         .lock()
         .map_err(|_| "Canary Flash became unavailable".to_string())?;
-    let result = guard
+    run_canary(&mut guard, samples, language)
+}
+
+/// Transcribes for the live preview without waiting on the model. Returns
+/// `None` while the model is still loading or another transcription is using
+/// it, so a preview pass never delays a finished dictation.
+pub(crate) fn try_transcribe_canary(
+    samples: &[f32],
+    language: &str,
+) -> Result<Option<String>, String> {
+    let Some(model) = CANARY_MODEL.get() else {
+        return Ok(None);
+    };
+    let mut guard = match model.try_lock() {
+        Ok(guard) => guard,
+        Err(std::sync::TryLockError::WouldBlock) => return Ok(None),
+        Err(std::sync::TryLockError::Poisoned(_)) => {
+            return Err("Canary Flash became unavailable".to_string())
+        }
+    };
+    run_canary(&mut guard, samples, language).map(Some)
+}
+
+fn run_canary(model: &mut CanaryModel, samples: &[f32], language: &str) -> Result<String, String> {
+    let result = model
         .transcribe_with(
             samples,
             &CanaryParams {

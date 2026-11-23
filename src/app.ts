@@ -10,6 +10,7 @@ import { createHistoryStore } from "./features/history/historyStore";
 import { renderHistory } from "./ui/historyView";
 import { setupNavigation } from "./ui/navigation";
 import { setupLanguagePicker } from "./ui/languagePicker";
+import { setupLivePreviewToggle } from "./ui/livePreviewToggle";
 
 export function startMainApp(iconUrl: string) {
   const view = renderMainView(iconUrl);
@@ -38,6 +39,7 @@ export function startMainApp(iconUrl: string) {
   };
   setupNavigation(view, refreshHistory);
   setupLanguagePicker(view, settings, logEvent);
+  setupLivePreviewToggle(view, settings, logEvent);
   dictation = new DictationFlow(view, recorder, () => shortcut, () => hotkeys.isHeld, () => speechEngine, (text) => {
     history.add(text);
     refreshHistory();

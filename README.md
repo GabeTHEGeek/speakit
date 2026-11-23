@@ -47,6 +47,7 @@ No account, subscription, cloud transcription, or paid API is required.
 - Automatic replacement of stale or muted microphone tracks after switching between SpeakIt and a call app
 - Delayed microphone recovery that reuses an in-progress request and retains a late successful connection instead of repeatedly restarting it
 - Invisible audio-host wake-up when macOS suspends microphone reacquisition after the main window is closed, with focus returned to the original app
+- Live preview: with Canary Flash, your words appear above the listening waveform while you talk and correct themselves as you keep speaking
 - Rapid-repeat dictation: begin the next recording while the previous result finishes processing
 - A built-in diagnostics report for microphone, Accessibility, model, installation, and recent events
 - One separator space after each dictation so consecutive sentences do not run together
@@ -78,6 +79,8 @@ Run SpeakIt from Applications rather than directly from the mounted installer. m
 5. SpeakIt transcribes locally, restores the original app, and pastes the text.
 
 Speak naturally and SpeakIt will conservatively format clear conversational transitions and questions. For exact control, say **“comma,” “period,” “question mark,” “new line,”** or **“new paragraph.”**
+
+With Canary Flash, **Live preview** shows a rough transcript above the waveform while you are still talking. Words can change as SpeakIt hears more of the sentence. Nothing is pasted until you release the shortcut, and the pasted text comes from one final pass over the whole recording. Turn it off under **Speech models → Live preview**. Whisper small.en is too slow to preview, so it shows only the waveform.
 
 You do not have to wait for the previous transcription to finish before starting another recording. SpeakIt processes completed recordings in order and remembers the target application for each one.
 
