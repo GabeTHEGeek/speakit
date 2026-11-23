@@ -23,8 +23,8 @@
       {
         "label": "overlay",
         "title": "SpeakIt Voice",
-        "width": 440,
-        "height": 112,
+        "width": 520,
+        "height": 140,
         "visible": false,
         "focus": false,
         "focusable": false,

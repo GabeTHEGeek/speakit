@@ -7,7 +7,7 @@ export function renderOverlay(currentWindow: Window) {
   document.body.className = "overlay-body";
   document.body.dataset.visible = "false";
   document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
-    <p class="live-transcript" aria-live="polite"></p>
+    <div class="live-transcript" aria-live="polite"><div class="live-transcript-lines"><span></span></div></div>
     <div class="voice-cube">
       <div class="waveform" aria-label="Live microphone level">
         ${Array.from({ length: 33 }, (_, index) => `<i style="--i:${index}"></i>`).join("")}
@@ -16,10 +16,11 @@ export function renderOverlay(currentWindow: Window) {
     </div>`;
 
   const bars = [...document.querySelectorAll<HTMLElement>(".waveform i")];
-  const transcript = document.querySelector<HTMLParagraphElement>(".live-transcript")!;
+  const transcript = document.querySelector<HTMLDivElement>(".live-transcript")!;
+  const transcriptText = transcript.querySelector("span")!;
   const showTranscript = (text: string) => {
-    transcript.textContent = previewTail(text);
-    transcript.classList.toggle("has-text", transcript.textContent !== "");
+    transcriptText.textContent = previewTail(text);
+    transcript.classList.toggle("has-text", transcriptText.textContent !== "");
   };
   let level = 0;
   let overlayVisible = false;
