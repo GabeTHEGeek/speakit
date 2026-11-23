@@ -128,3 +128,23 @@ test("live preview is on by default, Canary only, and the toggle saves changes",
   assert.equal(settings.livePreview, false);
   assert.deepEqual(logged, ["settings.livePreview enabled=false"]);
 });
+
+test("an empty pass keeps the last words on screen instead of blanking them", async () => {
+  const clock = manualClock();
+  let audio = new Float32Array(16_000);
+  const shown = [];
+  const replies = ["Hello there", "", "   ", "Hello there", "Hello there friend"];
+  const preview = new LivePreview({
+    snapshot: () => audio,
+    transcribe: async () => replies.shift() ?? null,
+    show: (text) => shown.push(text),
+    wait: clock.wait,
+  });
+  preview.start();
+  for (const length of [16_000, 24_000, 32_000, 40_000, 48_000]) {
+    audio = new Float32Array(length);
+    await clock.tick();
+  }
+  preview.stop();
+  assert.deepEqual(shown, ["", "Hello there", "Hello there friend", ""]);
+});
