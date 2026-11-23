@@ -63,6 +63,7 @@ export class LivePreview {
     const maxSamples = this.deps.maxSamples ?? SAMPLE_RATE * 20;
     const minNewSamples = this.deps.minNewSamples ?? Math.round(SAMPLE_RATE * 0.25);
     let lastLength = 0;
+    let lastShown = "";
     let passes = 0;
     while (generation === this.generation) {
       await wait(intervalMs);
@@ -80,7 +81,13 @@ export class LivePreview {
       if (generation !== this.generation) return;
       passes += 1;
       if (passes === 1) this.deps.log?.("preview.first", `samples=${samples.length} elapsed_ms=${Date.now() - started}`);
-      if (text !== null) this.deps.show(text);
+      // An empty pass (a pause, a cut-off word, a filtered sound) would blank
+      // the overlay until the next pass, so the last words stay up instead.
+      const trimmed = text?.trim() ?? "";
+      if (trimmed !== "" && trimmed !== lastShown) {
+        lastShown = trimmed;
+        this.deps.show(trimmed);
+      }
     }
   }
 }
